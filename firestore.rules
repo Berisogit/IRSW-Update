@@ -1,0 +1,201 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ======================================================================
+    // SECURITY HELPER FUNCTIONS
+    // ======================================================================
+    
+    // Core authentication check
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper for short-term fallback (Matches original signedIn logic)
+    function signedIn() {
+      return isAuthenticated();
+    }
+
+    // Anonymous User Check (For Migration Paths)
+    function isAnonymous() {
+      return isAuthenticated() && request.auth.token.firebase.sign_in_provider == 'anonymous';
+    }
+
+    // AI Studio Feature Functions
+    function isSystemAdmin() {
+      return isAuthenticated() && !isAnonymous() && request.auth.token.get('globalRole', '') == 'ADMIN';
+    }
+
+    // Helper shortcuts for payload changes
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Role verification helpers (Authoritative from Staff collection)
+    function getRole(orgId) {
+      let staffDoc = /databases/$(database)/documents/organizations/$(orgId)/staff/$(request.auth.uid);
+      return exists(staffDoc) ? get(staffDoc).data.get('role', null) : null;
+    }
+
+    function isOwner(orgId) {
+      return getRole(orgId) == 'OWNER';
+    }
+
+    function isManager(orgId) {
+      return getRole(orgId) == 'MANAGER';
+    }
+
+    function isStaffUser(orgId) {
+      return !isAnonymous() && getRole(orgId) != null;
+    }
+
+    function isOrgCreator(orgId) {
+      let orgDoc = /databases/$(database)/documents/organizations/$(orgId);
+      return exists(orgDoc) && get(orgDoc).data.get('createdBy', '') == request.auth.uid;
+    }
+
+    // ======================================================================
+    // COLLECTION ROUTING & MATCHING
+    // ======================================================================
+
+    // 1. SYSTEM CONFIGURATIONS
+    match /system/{docId} {
+      allow read: if signedIn() && !isAnonymous();
+      allow write: if isSystemAdmin();
+    }
+
+    // 2. ORGANIZATION USERS MAPPING
+    match /organizationUsers/{docId} {
+      allow read, write: if false; // Disabled completely in Phase 5A
+    }
+
+    // 3. ORGANIZATIONS & NESTED SUBCOLLECTIONS
+    match /organizations/{orgId} {
+      allow read: if signedIn() && (!isAnonymous() ? isStaffUser(orgId) : false);
+      allow create: if signedIn() && !isAnonymous() && incoming().get('createdBy', '') == request.auth.uid;
+      allow update: if signedIn() && !isAnonymous() && (isOwner(orgId) || isManager(orgId));
+      allow delete: if isSystemAdmin();
+
+      // --- Staff Management Subcollection ---
+      match /staff/{staffId} {
+        // Staff can read their co-workers to display POS views, Guests cannot
+        allow read: if signedIn() && !isAnonymous() && isStaffUser(orgId);
+        
+        // Prevent privilege escalation
+        allow create: if signedIn() && !isAnonymous() && (
+          isOwner(orgId) || 
+          isOrgCreator(orgId) ||
+          (isManager(orgId) && incoming().get('role', '') != 'OWNER')
+        );
+        
+        allow update: if signedIn() && !isAnonymous() && (
+          isOwner(orgId) || 
+          (isManager(orgId) && existing().get('role', '') != 'OWNER' && incoming().get('role', '') != 'OWNER')
+        );
+        
+        allow delete: if signedIn() && !isAnonymous() && (
+          isOwner(orgId) || 
+          (isManager(orgId) && existing().get('role', '') != 'OWNER')
+        );
+      }
+
+      // --- Explicitly Routed Operational Subcollections ---
+      
+      // Public-facing menus requires public read for guest ordering
+      match /categories/{docId} {
+        allow read: if true;
+        allow write: if signedIn() && !isAnonymous() && (isOwner(orgId) || isManager(orgId));
+      }
+      match /menuItems/{docId} {
+        allow read: if true;
+        allow write: if signedIn() && !isAnonymous() && (isOwner(orgId) || isManager(orgId));
+      }
+      match /tables/{docId} {
+        allow read: if true;
+        allow write: if signedIn() && !isAnonymous() && isStaffUser(orgId);
+      }
+
+      // Elevated privilege operations
+      match /inventory/{docId} {
+        allow read: if signedIn() && !isAnonymous() && isStaffUser(orgId);
+        allow write: if signedIn() && !isAnonymous() && getRole(orgId) in ['OWNER', 'MANAGER', 'SUPERVISOR', 'CASHIER'];
+      }
+      match /inventoryPostings/{docId} {
+        allow read: if signedIn() && !isAnonymous() && isStaffUser(orgId);
+        allow write: if signedIn() && !isAnonymous() && getRole(orgId) in ['OWNER', 'MANAGER', 'SUPERVISOR', 'CASHIER'];
+      }
+      match /payments/{docId} {
+        allow read: if signedIn() && !isAnonymous() && isStaffUser(orgId);
+        allow write: if signedIn() && !isAnonymous() && getRole(orgId) in ['OWNER', 'MANAGER', 'SUPERVISOR', 'CASHIER'];
+      }
+
+      // Standard operations (Maintaining functionality)
+      match /orders/{docId} {
+        allow read: if signedIn() && (
+           (!isAnonymous() && isStaffUser(orgId)) || 
+           (isAnonymous() && resource.data.customerId == request.auth.uid)
+        );
+        allow create: if signedIn() && (
+           (!isAnonymous() && isStaffUser(orgId)) ||
+           (isAnonymous() && incoming().keys().hasAll(['status', 'items', 'subtotal']) && incoming().status == 'AWAITING_APPROVAL')
+        ) || (
+          // Temporary fallback for unauthenticated URL guests
+          !signedIn() && 
+          incoming().keys().hasAll(['status', 'items', 'subtotal']) &&
+          incoming().status == 'AWAITING_APPROVAL' &&
+          incoming().items is list &&
+          incoming().items.size() > 0 && 
+          incoming().items.size() <= 30 &&
+          incoming().get('subtotal', 0) is number
+        );
+        allow update, delete: if signedIn() && !isAnonymous() && isStaffUser(orgId);
+      }
+
+      match /suppliers/{docId} { allow read, write: if signedIn() && !isAnonymous() && isStaffUser(orgId); }
+      match /customers/{docId} { allow read, write: if signedIn() && !isAnonymous() && isStaffUser(orgId); }
+      match /reservations/{docId} { allow read, write: if signedIn() && !isAnonymous() && isStaffUser(orgId); }
+      match /recipes/{docId} { allow read, write: if signedIn() && !isAnonymous() && isStaffUser(orgId); }
+      match /recipeMappings/{docId} { allow read, write: if signedIn() && !isAnonymous() && isStaffUser(orgId); }
+
+      // Default deny for wildcard to prevent exposing undefined collections
+      match /{document=**} {
+        allow read, write: if signedIn() && isSystemAdmin();
+      }
+    }
+
+    // 4. USERS
+    match /users/{userId} {
+      allow read, list: if signedIn() && !isAnonymous();
+      allow create: if signedIn() && !isAnonymous();
+      allow update: if signedIn() && !isAnonymous() && (
+        request.auth.uid == userId ||
+        ('organizationId' in existing() && (isOwner(existing().organizationId) || isManager(existing().organizationId)))
+      );
+      allow delete: if isSystemAdmin();
+    }
+
+    // 5. MEMBERSHIPS
+    match /memberships/{membershipId} {
+      allow read: if signedIn() && !isAnonymous() && (
+        existing().userId == request.auth.uid || 
+        isManager(existing().organizationId) || 
+        isOwner(existing().organizationId)
+      );
+      
+      allow create: if signedIn() && !isAnonymous() && 
+        (isOwner(incoming().organizationId) || isManager(incoming().organizationId) || isOrgCreator(incoming().organizationId)) && 
+        membershipId == (incoming().organizationId + "_" + incoming().userId);
+        
+      allow update: if signedIn() && !isAnonymous() && 
+        (isOwner(existing().organizationId) || isManager(existing().organizationId) || isOrgCreator(existing().organizationId)) && 
+        membershipId == (incoming().organizationId + "_" + incoming().userId);
+        
+      allow delete: if signedIn() && !isAnonymous() && isOwner(existing().organizationId);
+    }
+
+  }
+}
