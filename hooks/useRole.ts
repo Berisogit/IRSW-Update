@@ -5,11 +5,13 @@ import {
   isGuest,
   isAdmin,
   isSystemAdmin,
+  isAtLeast,
   canManageSystem,
   canManageRoles,
   canManageMenu,
   canReadAudit,
-  canWriteOrders
+  canWriteOrders,
+  canProcessPayments
 } from '../roleUtils';
 
 export const useRole = (userRole?: Role) => {
@@ -27,6 +29,8 @@ export const useRole = (userRole?: Role) => {
       canManageMenu: canManageMenu(role),
       canReadAudit: canReadAudit(role),
       canWriteOrders: canWriteOrders(role),
+      canProcessPayments: canProcessPayments(role),
+      isAtLeast: (minRole: Role) => isAtLeast(role, minRole),
       hasRole: (allowedRoles: Role[]) => allowedRoles.includes(role),
     };
   }, [userRole]);

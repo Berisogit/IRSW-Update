@@ -117,7 +117,7 @@ export const MOCK_ORDERS: Order[] = [
     paymentStatus: PaymentStatus.PENDING,
     total: 16.00,
     timestamp: Date.now() - 1000 * 60 * 5, // 5 mins ago
-    createdBy: 'service',
+    createdBy: 'waiter',
     items: [
       {
         ...INITIAL_MENU[1],
@@ -135,7 +135,7 @@ export const MOCK_ORDERS: Order[] = [
     paymentStatus: PaymentStatus.PENDING,
     total: 31.00,
     timestamp: Date.now() - 1000 * 60 * 15, // 15 mins ago
-    createdBy: 'service',
+    createdBy: 'waiter',
     items: [
         {
           ...INITIAL_MENU[2],

@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useDeferredValue, useEffect } from 'react';
 import { MenuItem, MenuCategory, CartItem, Order, OrderStatus, PaymentStatus, MenuItemStatus, Permission, TableStatus, Table } from '../types';
+import { UserRole } from '../types/shared';
 import { Button } from '../components/Button';
 import { RESTAURANT_NAME } from '../constants';
 import { ConfirmationModal } from '../components/Modals';
@@ -227,7 +228,7 @@ const POSView: React.FC<any> = ({
   onCashierConfirmPayment, onGuestSubmitPayment, readyOrders = [], onServeOrder, onOpenHistory, hasPermission, securityError, clearSecurityError,
   updateCartNote, onAddVoiceItems, onOpenScanner
 }) => {
-  const isGuestRole = user.role === 'guest';
+  const isGuestRole = user.role?.toLowerCase() === UserRole.GUEST;
   const canCommitOrder = db.canWriteOrders(user.role);
   
   const [guestViewMode, setGuestViewMode] = useState<'MENU' | 'BASKET' | 'ACTIVE'>('MENU');
