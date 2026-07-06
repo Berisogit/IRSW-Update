@@ -60,7 +60,7 @@ export interface UserDoc {
 
 export interface OrganizationUserDoc extends BaseDocument {
   userId: string;
-  role: 'OWNER' | 'MANAGER' | 'CASHIER' | 'WAITER' | 'KITCHEN';
+  role: 'owner' | 'manager' | 'supervisor' | 'cashier' | 'waiter' | 'kitchen';
   status: 'ACTIVE' | 'INVITED' | 'DISABLED';
   branchIds?: string[]; // Array of branch IDs this user has access to (if empty, implicit access to all)
 }
@@ -72,7 +72,7 @@ export interface StaffDoc extends BaseDocument {
   displayName: string;
   email: string;
   staffCode: string;
-  role: string;
+  role: 'owner' | 'manager' | 'supervisor' | 'cashier' | 'waiter' | 'kitchen';
   status: 'ACTIVE' | 'INACTIVE' | 'PENDING_APPROVAL' | 'SUSPENDED' | 'REJECTED';
   
   phone?: string;

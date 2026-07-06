@@ -1,7 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 
-import { UserRole, UserStatus, AuditOutcome } from '../types/shared';
+import { UserRole, UserStatus, AuditOutcome } from './types/shared';
 admin.initializeApp();
 
 /**

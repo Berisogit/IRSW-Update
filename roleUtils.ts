@@ -68,3 +68,7 @@ export const canReadAudit = (role: Role): boolean =>
  */
 export const canWriteOrders = (role: Role): boolean =>
   isStaff(role) || isGuest(role);
+
+export const canProcessPayments = (role: Role): boolean =>
+    isAtLeast(role, "owner");
+

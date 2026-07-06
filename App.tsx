@@ -1215,44 +1215,6 @@ const App = () => {
 
   const { isSystemAdmin } = useRole(user?.role);
 
-    if (!systemConfig) {
-      if (initTimeout) {
-         return (
-           <div className="flex flex-col h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white p-6">
-             <i className="fas fa-exclamation-triangle text-amber-500 text-5xl mb-4"></i>
-             <h2 className="text-2xl font-bold mb-2">System Load Timeout</h2>
-             <p className="text-slate-500 mb-6 max-w-md text-center">The application took too long to load configuration. This may be due to network issues.</p>
-             <div className="flex gap-4">
-                 <button onClick={() => setInitTimeout(false)} className="px-6 py-3 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-bold">Continue Waiting</button>
-                 <button onClick={() => window.location.reload()} className="px-6 py-3 bg-brand-600 text-white rounded-xl font-bold">Reload System</button>
-                 <button onClick={authLogout} className="px-6 py-3 bg-rose-600 text-white rounded-xl font-bold">Sign Out</button>
-             </div>
-           </div>
-         );
-      }
-      return (
-        <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white">
-          <div className="text-center">
-            <i className="fas fa-spinner fa-spin text-4xl text-brand-500 mb-4"></i>
-            <h2 className="text-xl font-bold">Initializing System...</h2>
-          </div>
-        </div>
-      );
-    }
-
-    if (!systemConfig.initialized) {
-      return <InitializationBlocker isSystemAdmin={isSystemAdmin} />;
-    }
-
-  if (isTerminating) {
-    return (
-      <div className="fixed inset-0 z-[5000] bg-slate-950 flex flex-col items-center justify-center animate-in fade-in duration-500">
-        <div className="w-16 h-16 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mb-8 shadow-glow"></div>
-        <h2 className="text-white font-black uppercase tracking-[0.4em] text-xs">Purging Protocol State</h2>
-      </div>
-    );
-  }
-
     /**
      * Stage 4: Bootstrap Architecture - Register New Restaurant
      * This resolves the bootstrap deadlock by creating an organization and an owner simultaneously.
@@ -1303,6 +1265,44 @@ const App = () => {
             throw err;
         }
     }, [systemConfig, logAction]);
+
+    if (!systemConfig) {
+      if (initTimeout) {
+         return (
+           <div className="flex flex-col h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white p-6">
+             <i className="fas fa-exclamation-triangle text-amber-500 text-5xl mb-4"></i>
+             <h2 className="text-2xl font-bold mb-2">System Load Timeout</h2>
+             <p className="text-slate-500 mb-6 max-w-md text-center">The application took too long to load configuration. This may be due to network issues.</p>
+             <div className="flex gap-4">
+                 <button onClick={() => setInitTimeout(false)} className="px-6 py-3 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-bold">Continue Waiting</button>
+                 <button onClick={() => window.location.reload()} className="px-6 py-3 bg-brand-600 text-white rounded-xl font-bold">Reload System</button>
+                 <button onClick={authLogout} className="px-6 py-3 bg-rose-600 text-white rounded-xl font-bold">Sign Out</button>
+             </div>
+           </div>
+         );
+      }
+      return (
+        <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white">
+          <div className="text-center">
+            <i className="fas fa-spinner fa-spin text-4xl text-brand-500 mb-4"></i>
+            <h2 className="text-xl font-bold">Initializing System...</h2>
+          </div>
+        </div>
+      );
+    }
+
+    if (!systemConfig.initialized) {
+      return <InitializationBlocker isSystemAdmin={isSystemAdmin} />;
+    }
+
+  if (isTerminating) {
+    return (
+      <div className="fixed inset-0 z-[5000] bg-slate-950 flex flex-col items-center justify-center animate-in fade-in duration-500">
+        <div className="w-16 h-16 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mb-8 shadow-glow"></div>
+        <h2 className="text-white font-black uppercase tracking-[0.4em] text-xs">Purging Protocol State</h2>
+      </div>
+    );
+  }
 
   return (
     <div className={`flex h-screen overflow-hidden font-sans ${theme === 'dark' ? 'dark bg-slate-950' : 'bg-slate-50'}`}>
