@@ -6,7 +6,7 @@ import { useRole } from '../hooks/useRole';
 
 interface ProtectedRouteProps {
   user: UserProfile | null;
-  allowedRoles: Role[];
+  allowedRoles: Role | Role[];
   onUnauthorized: () => void;
   children: React.ReactNode;
 }
@@ -21,7 +21,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   onUnauthorized,
   children 
 }) => {
-  const { isGuest, hasRole } = useRole(user?.role);
+  const { isGuest, hasRole, isAtLeast } = useRole(user?.role);
 
   // 1. Identity Verification (Authentication Check)
   if (!user) {
@@ -71,8 +71,32 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     );
   }
 
-  // 3. Claims Verification (Role-Based Access Check)
-  const isAuthorized = hasRole(allowedRoles);
+  // 3. Multi-Tenant Isolation (Organization ID Check)
+  // Operational nodes must be scoped to an organization to prevent data leakage and sync failures.
+  if (!user.organizationId && !isGuest) {
+    return (
+      <div className="h-screen bg-slate-950 flex items-center justify-center p-8 text-center overflow-hidden">
+        <div className="absolute inset-0 bg-rose-600/5 blur-[100px]"></div>
+        <div className="max-w-md bg-white/5 backdrop-blur-3xl p-12 rounded-[4rem] border border-white/10 shadow-2xl relative z-10">
+          <div className="w-24 h-24 bg-rose-600 text-white rounded-[2.5rem] flex items-center justify-center text-4xl mx-auto mb-10 shadow-glow">
+            <i className="fas fa-building-circle-exclamation"></i>
+          </div>
+          <h2 className="text-3xl font-black text-white uppercase tracking-tighter mb-4 leading-none">Tenant Required</h2>
+          <p className="text-slate-400 font-medium mb-12 leading-relaxed text-sm">
+            Your account is not associated with an active organization. Access to operational terminals is restricted.
+          </p>
+          <Button onClick={onUnauthorized} variant="danger" className="w-full h-18 rounded-[2rem] font-black uppercase text-xs tracking-widest shadow-glow">
+            Sign Out
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // 4. Claims Verification (Role-Based Access Check)
+  const isAuthorized = Array.isArray(allowedRoles) 
+    ? hasRole(allowedRoles) 
+    : isAtLeast(allowedRoles);
 
   if (!isAuthorized) {
     return (

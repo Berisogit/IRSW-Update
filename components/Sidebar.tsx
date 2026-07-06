@@ -62,7 +62,7 @@ interface SidebarProps {
   onResetSession: () => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
-  roleDefinitions: RoleDefinition[];
+  roleDefinitions?: RoleDefinition[]; // Make optional
   isMobileOpen?: boolean;
   onMobileClose?: () => void;
   badges?: {
@@ -80,6 +80,9 @@ interface SidebarProps {
   onToggleTheme: () => void;
 }
 
+const POS_ACCESS: Role[] = ['waiter', 'cashier', 'manager', 'supervisor', 'owner', 'system_admin', 'super_admin'];
+const KDS_ACCESS: Role[] = ['kitchen', 'manager', 'supervisor', 'owner', 'system_admin', 'super_admin'];
+
 export const Sidebar: React.FC<SidebarProps> = React.memo(({ 
   user, 
   activeView, 
@@ -95,35 +98,45 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   theme,
   onToggleTheme
 }) => {
-  const userRoleDef = roleDefinitions.find(r => r.id === user.role);
-  const hasPerm = (p: Permission) => userRoleDef?.permissions.includes(p) || false;
-  const { isGuest, isStaff } = useRole(user.role as Role);
+  // userRoleDef is now primarily used for display name, not permissions
+  const userRoleDef = roleDefinitions?.find(r => r.id === user.role);
+  const { 
+    isGuest, 
+    isStaff, 
+    isAtLeast, 
+    hasRole, 
+    canManageMenu, 
+    canReadAudit,
+    canManageRoles,
+    canWriteOrders, // Add canWriteOrders from useRole
+    canProcessPayments // Add canProcessPayments from useRole
+  } = useRole(user.role as Role);
 
   const sections = [
     {
-      title: 'Operations',
-      items: [
-        { id: 'POS', label: 'Terminal', icon: 'fa-desktop', permission: Permission.VIEW_POS, badge: (hasPerm(Permission.MANAGE_ORDERS) ? badges?.pendingApprovals : (hasPerm(Permission.PROCESS_PAYMENTS) ? badges?.pendingPayments : null)) },
-        { id: 'KDS', label: 'Kitchen', icon: 'fa-fire', permission: Permission.VIEW_KDS, badge: badges?.readyToServe },
-        { id: 'CUSTOMER', label: 'Menu', icon: 'fa-utensils', permission: Permission.VIEW_CUSTOMER_MENU },
-      ]
-    },
-    {
-      title: 'Governance',
-      items: [
-        { id: 'ADMIN_FLOOR', label: 'Floor Map', icon: 'fa-layer-group', permission: Permission.VIEW_FLOOR_PLAN, badge: badges?.occupiedTables },
-        { id: 'ADMIN_RESERVATIONS', label: 'Reservations', icon: 'fa-calendar-check', permission: Permission.VIEW_RESERVATIONS, badge: badges?.pendingReservations },
-        { id: 'ADMIN_TASKS', label: 'Task Board', icon: 'fa-list-check', permission: Permission.VIEW_TASKS, badge: badges?.activeTasks },
-        { id: 'ADMIN_SALES', label: 'Analytics', icon: 'fa-chart-simple', permission: Permission.VIEW_SALES_REPORTS },
-        { id: 'ADMIN_INVENTORY', label: 'Inventory', icon: 'fa-boxes-stacked', permission: Permission.VIEW_INVENTORY, badge: badges?.lowStock },
-        { id: 'ADMIN_MENU', label: 'Catalogue', icon: 'fa-book-open', permission: Permission.VIEW_MENU_CATALOGUE },
-        { id: 'ADMIN_STAFF', label: 'Personnel', icon: 'fa-users-gear', permission: Permission.MANAGE_PERSONNEL },
-        { id: 'ADMIN_APPROVALS', label: 'Approvals', icon: 'fa-user-check', permission: Permission.MANAGE_PERSONNEL, badge: badges?.pendingStaff },
-        { id: 'ADMIN_ROLES', label: 'Authority', icon: 'fa-user-lock', permission: Permission.MANAGE_ROLES },
-        { id: 'ADMIN_AUDIT', label: 'Audit Trail', icon: 'fa-fingerprint', permission: Permission.VIEW_AUDIT_TRAIL },
-      ]
-    }
-  ];
+        title: 'Operations',
+        items: [
+          { id: 'POS', label: 'Terminal', icon: 'fa-desktop', visible: hasRole(POS_ACCESS), badge: (canWriteOrders ? badges?.pendingApprovals : (canProcessPayments ? badges?.pendingPayments : null)) },
+          { id: 'KDS', label: 'Kitchen', icon: 'fa-fire', visible: hasRole(KDS_ACCESS), badge: badges?.readyToServe },
+          { id: 'CUSTOMER', label: 'Menu', icon: 'fa-utensils', visible: true },
+        ]
+      },
+      {
+        title: 'Governance',
+        items: [
+          { id: 'ADMIN_FLOOR', label: 'Floor Map', icon: 'fa-layer-group', visible: isAtLeast('manager'), badge: badges?.occupiedTables },
+          { id: 'ADMIN_RESERVATIONS', label: 'Reservations', icon: 'fa-calendar-check', visible: isAtLeast('manager'), badge: badges?.pendingReservations },
+          { id: 'ADMIN_TASKS', label: 'Task Board', icon: 'fa-list-check', visible: isAtLeast('manager'), badge: badges?.activeTasks },
+          { id: 'ADMIN_SALES', label: 'Analytics', icon: 'fa-chart-simple', visible: isAtLeast('manager') },
+          { id: 'ADMIN_INVENTORY', label: 'Inventory', icon: 'fa-boxes-stacked', visible: isAtLeast('manager'), badge: badges?.lowStock },
+          { id: 'ADMIN_MENU', label: 'Catalogue', icon: 'fa-book-open', visible: canManageMenu },
+          { id: 'ADMIN_STAFF', label: 'Personnel', icon: 'fa-users-gear', visible: isAtLeast('manager') },
+          { id: 'ADMIN_APPROVALS', label: 'Approvals', icon: 'fa-user-check', visible: isAtLeast('manager'), badge: badges?.pendingStaff },
+          { id: 'ADMIN_ROLES', label: 'Authority', icon: 'fa-user-lock', visible: canManageRoles },
+          { id: 'ADMIN_AUDIT', label: 'Audit Trail', icon: 'fa-fingerprint', visible: canReadAudit },
+        ]
+      }
+    ];
 
   const sidebarClasses = `
     glass-dark text-white h-screen flex flex-col fixed top-0 z-50 transition-all duration-500 ease-in-out border-r border-white/5
@@ -166,7 +179,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
         
         <nav className="flex-1 px-4 md:px-6 space-y-10 overflow-y-auto no-scrollbar py-6 md:py-8">
           {sections.map((section, sIdx) => {
-            const visibleItems = section.items.filter(item => hasPerm(item.permission));
+            const visibleItems = section.items.filter(item => item.visible);
             if (visibleItems.length === 0) return null;
 
             return (

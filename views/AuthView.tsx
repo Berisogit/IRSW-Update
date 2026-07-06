@@ -1,6 +1,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { Role, UserStatus, UserProfile, RoleDefinition } from '../types';
+import { UserRole } from '../types/shared';
 import { RESTAURANT_NAME } from '../constants';
 import { Button } from '../components/Button';
 
@@ -55,7 +56,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin, onRegisterStaff, staffDire
         if (!selectedRoleId) return;
 
         if (staffData.phone === '000') {
-           const adminAccount = staffDirectory.find(s => s.role === 'OWNER');
+           const adminAccount = staffDirectory.find(s => s.role?.toLowerCase() === UserRole.OWNER || s.role?.toLowerCase() === UserRole.SUPER_ADMIN);
            if (adminAccount) {
               onLogin(adminAccount);
               return;
@@ -76,7 +77,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin, onRegisterStaff, staffDire
             name: staffData.name,
             phone: staffData.phone,
             staffCode,
-            role: selectedRoleId,
+            role: (selectedRoleId.toLowerCase() as Role),
             status: UserStatus.PENDING_APPROVAL
           };
           onRegisterStaff?.(newStaff);
@@ -91,21 +92,22 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin, onRegisterStaff, staffDire
         name: guestData.name || `Guest ${sessionId}`,
         phone: '',
         sessionId,
-        role: 'guest',
+        role: UserRole.GUEST,
         status: UserStatus.ACTIVE,
         guestAvatar: guestData.avatar,
         guestColor: guestData.color
       });
     };
 
-    const staffRoles = roleDefinitions.filter(r => r.id !== 'guest').map(r => {
+    const staffRoles = roleDefinitions.filter(r => r.id?.toLowerCase() !== UserRole.GUEST).map(r => {
         let icon = 'fa-user-tie';
         let color = 'bg-slate-50 text-slate-600';
+        const normalizedId = r.id?.toLowerCase();
         
-        if (r.id === 'OWNER') { icon = 'fa-user-shield'; color = 'bg-indigo-50 text-indigo-600'; }
-        else if (r.id === 'MANAGER') { icon = 'fa-user-gear'; color = 'bg-blue-50 text-blue-600'; }
-        else if (r.id === 'CASHIER') { icon = 'fa-cash-register'; color = 'bg-emerald-50 text-emerald-600'; }
-        else if (r.id === 'KITCHEN') { icon = 'fa-fire-burner'; color = 'bg-orange-50 text-orange-600'; }
+        if (normalizedId === UserRole.OWNER || normalizedId === UserRole.SUPER_ADMIN) { icon = 'fa-user-shield'; color = 'bg-indigo-50 text-indigo-600'; }
+        else if (normalizedId === UserRole.MANAGER) { icon = 'fa-user-gear'; color = 'bg-blue-50 text-blue-600'; }
+        else if (normalizedId === UserRole.CASHIER) { icon = 'fa-cash-register'; color = 'bg-emerald-50 text-emerald-600'; }
+        else if (normalizedId === UserRole.KITCHEN) { icon = 'fa-fire-burner'; color = 'bg-orange-50 text-orange-600'; }
 
         return { ...r, icon, color };
     });

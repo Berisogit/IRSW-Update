@@ -61,19 +61,19 @@ const AdminView = React.lazy(() => import('./views/AdminView'));
 const ProfileView = React.lazy(() => import('./views/ProfileView').then(module => ({ default: module.ProfileView })));
 const MapOverlayView = React.lazy(() => import('./views/MapOverlayView').then(m => ({ default: m.MapOverlayView })));
 
-const POS_ACCESS: Role[] = ['waiter', 'cashier', 'manager', 'supervisor', 'owner', 'SUPER_ADMIN'];
-const KDS_ACCESS: Role[] = ['kitchen', 'manager', 'supervisor', 'owner', 'SUPER_ADMIN'];
-const ADMIN_ACCESS: Role[] = ['manager', 'owner', 'SUPER_ADMIN'];
+const POS_ACCESS: Role[] = ['waiter', 'cashier', 'manager', 'supervisor', 'owner', 'system_admin', 'super_admin'];
+const KDS_ACCESS: Role[] = ['kitchen', 'manager', 'supervisor', 'owner', 'system_admin', 'super_admin'];
+const ADMIN_ACCESS: Role[] = ['manager', 'owner', 'system_admin', 'super_admin'];
 
 const DEFAULT_ROLES: RoleDefinition[] = [
-  { id: 'SUPER_ADMIN', name: 'System Administrator', isSystem: true, permissions: Object.values(Permission) },
+  { id: 'system_admin', name: 'System Administrator', isSystem: true, permissions: Object.values(Permission) },
   { id: 'owner', name: 'Restaurant Owner', isSystem: true, permissions: [Permission.VIEW_POS, Permission.VIEW_KDS, Permission.VIEW_FLOOR_PLAN, Permission.VIEW_RESERVATIONS, Permission.VIEW_SALES_REPORTS, Permission.VIEW_INVENTORY, Permission.VIEW_MENU_CATALOGUE, Permission.VIEW_AUDIT_TRAIL, Permission.VIEW_FEEDBACK, Permission.VIEW_TASKS, Permission.MANAGE_ORDERS, Permission.PROCESS_PAYMENTS, Permission.PREPARE_ORDERS, Permission.MANAGE_MENU, Permission.MANAGE_FLOOR, Permission.MANAGE_PERSONNEL, Permission.MANAGE_ROLES, Permission.MANAGE_TASKS] },
   { id: 'manager', name: 'Manager', isSystem: true, permissions: [Permission.VIEW_POS, Permission.VIEW_KDS, Permission.VIEW_FLOOR_PLAN, Permission.VIEW_RESERVATIONS, Permission.VIEW_SALES_REPORTS, Permission.VIEW_INVENTORY, Permission.VIEW_MENU_CATALOGUE, Permission.VIEW_AUDIT_TRAIL, Permission.VIEW_FEEDBACK, Permission.VIEW_TASKS, Permission.MANAGE_ORDERS, Permission.PREPARE_ORDERS, Permission.MANAGE_MENU, Permission.MANAGE_FLOOR, Permission.MANAGE_TASKS] },
   { id: 'supervisor', name: 'Supervisor', isSystem: true, permissions: [Permission.VIEW_POS, Permission.VIEW_KDS, Permission.VIEW_FLOOR_PLAN, Permission.VIEW_RESERVATIONS, Permission.VIEW_INVENTORY, Permission.VIEW_MENU_CATALOGUE, Permission.VIEW_TASKS, Permission.MANAGE_ORDERS, Permission.PREPARE_ORDERS, Permission.MANAGE_MENU, Permission.MANAGE_FLOOR, Permission.MANAGE_TASKS] },
   { id: 'waiter', name: 'Service Staff', isSystem: true, permissions: [Permission.VIEW_POS, Permission.MANAGE_ORDERS, Permission.VIEW_FLOOR_PLAN, Permission.VIEW_TASKS] },
   { id: 'cashier', name: 'Cashier', isSystem: true, permissions: [Permission.VIEW_POS, Permission.PROCESS_PAYMENTS, Permission.VIEW_TASKS] },
   { id: 'kitchen', name: 'Kitchen Staff', isSystem: true, permissions: [Permission.VIEW_KDS, Permission.PREPARE_ORDERS, Permission.VIEW_TASKS] },
-  { id: 'VIEWER', name: 'Viewer', isSystem: true, permissions: [Permission.VIEW_MENU_CATALOGUE, Permission.VIEW_FLOOR_PLAN] },
+  { id: 'viewer', name: 'Viewer', isSystem: true, permissions: [Permission.VIEW_MENU_CATALOGUE, Permission.VIEW_FLOOR_PLAN] },
   { id: 'guest', name: 'Guest Client', isSystem: true, permissions: [Permission.VIEW_CUSTOMER_MENU] }
 ];
 
@@ -86,7 +86,7 @@ const MOCK_HISTORICAL_LOGS: AuditLog[] = [
   {
     id: 'log_mock_1',
     timestamp: Date.now() - 5 * 60 * 1000, // 5 mins ago
-    userRole: 'MANAGER',
+    userRole: 'manager',
     userIdentifier: 'Manager Sarah',
     action: 'ORDER_APPROVED',
     targetEntityType: 'Order',
@@ -123,19 +123,19 @@ const MOCK_HISTORICAL_LOGS: AuditLog[] = [
     userIdentifier: 'Owner Dave',
     action: 'ROLE_DEFINITION_MODIFIED',
     targetEntityType: 'RoleDefinition',
-    targetEntityId: 'MANAGER',
+    targetEntityId: 'manager',
     notes: 'Expanded spectrum permissions for Manager role nodes.',
     outcome: ActionOutcome.SUCCESS
   },
   {
     id: 'log_mock_5',
     timestamp: Date.now() - 1 * 24 * 3600 * 1000, // 1 day ago
-    userRole: 'OWNER',
+    userRole: 'owner',
     userIdentifier: 'Owner Dave',
     action: 'STAFF_REGISTERED',
     targetEntityType: 'User',
     targetEntityId: 'staff_jenna',
-    notes: 'Registered Jenna Smith as CASHIER.',
+    notes: 'Registered Jenna Smith as cashier.',
     outcome: ActionOutcome.SUCCESS
   },
   {
@@ -227,6 +227,27 @@ const MOCK_HISTORICAL_LOGS: AuditLog[] = [
     outcome: ActionOutcome.SUCCESS
   }
 ];
+
+/**
+ * Authority Node: Token Synchronization
+ * Forces Firebase to fetch a new ID token, ensuring custom claims 
+ * (organizationId, role) are propagated to the client immediately after 
+ * administrative registration or bootstrap sequences.
+ */
+export const refreshIdToken = async () => {
+  try {
+    const { auth } = await import('./lib/firebase');
+    if (auth?.currentUser) {
+      console.log('[IRSW Auth] Forcing ID token refresh to synchronize custom claims...');
+      await auth.currentUser.getIdToken(true);
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('[IRSW Auth] Failed to refresh ID token:', error);
+    return false;
+  }
+};
 
 const App = () => {
   const { user, updateUser: setUser, loading: isAuthLoading, authError, retryInit, logout: authLogout } = useAuth();
@@ -586,7 +607,7 @@ const App = () => {
           paymentStatus: doc.paymentStatus as PaymentStatus,
           total: doc.grandTotal,
           timestamp: doc.createdAt || Date.now(),
-          createdBy: (doc.orderSource as Role) || 'pos_staff',
+          createdBy: (doc.orderSource as Role) || 'waiter',
           guestAvatar: doc.guestAvatar,
           guestColor: doc.guestColor,
           items: doc.items.map(item => ({
@@ -835,7 +856,7 @@ const App = () => {
             paymentStatus: doc.paymentStatus as PaymentStatus,
             total: doc.grandTotal,
             timestamp: doc.createdAt || Date.now(),
-            createdBy: (doc.orderSource as Role) || 'pos_staff',
+            createdBy: (doc.orderSource as Role) || 'waiter',
             guestAvatar: doc.guestAvatar,
             guestColor: doc.guestColor,
             items: doc.items.map((item: any) => ({
@@ -883,6 +904,7 @@ const App = () => {
       logAction('SESSION_TERMINATION', 'User', user?.staffCode || user?.sessionId || 'Unknown', ActionOutcome.SUCCESS);
       await authLogout(); 
       try { localStorage.removeItem(CART_STORAGE_KEY); localStorage.removeItem(PREFS_VIEW_KEY); } catch(e) {}
+      setIsTerminating(false);
     } catch (err) {
       try { localStorage.clear(); } catch(e) {}
       window.location.href = '/';
@@ -903,6 +925,7 @@ const App = () => {
         logAction('GUEST_RESET', 'User', user?.sessionId || 'Unknown', ActionOutcome.SUCCESS);
         await authLogout(); 
         try { localStorage.removeItem(CART_STORAGE_KEY); localStorage.removeItem(PREFS_VIEW_KEY); } catch(e) {}
+        setIsTerminating(false);
       } catch (err) {
         try { localStorage.clear(); } catch(e) {}
         window.location.href = '/';
@@ -925,13 +948,13 @@ const App = () => {
         if (user.role === 'guest') {
           setActiveView('CUSTOMER');
         } else {
-          switch (user.role) {
-            case 'KITCHEN': setActiveView('KDS'); break;
-            case 'CASHIER':
-            case 'WAITER': setActiveView('POS'); break;
-            case 'MANAGER':
-            case 'SUPER_ADMIN':
-            case 'OWNER': setActiveView('ADMIN_SALES'); break;
+          switch (user.role as string) {
+            case 'kitchen': setActiveView('KDS'); break;
+            case 'cashier':
+            case 'waiter': setActiveView('POS'); break;
+            case 'manager':
+            case 'system_admin':
+            case 'owner': setActiveView('ADMIN_SALES'); break;
             default: setActiveView('POS');
           }
         }
@@ -1192,6 +1215,57 @@ const App = () => {
 
   const { isSystemAdmin } = useRole(user?.role);
 
+    /**
+     * Stage 4: Bootstrap Architecture - Register New Restaurant
+     * This resolves the bootstrap deadlock by creating an organization and an owner simultaneously.
+     */
+    const handleRegisterRestaurant = useCallback(async (restaurantName: string, ownerName: string, email: string, phone: string, password: string) => {
+        setIsTerminating(true); // Show loading overlay for initialization
+        console.log('[Bootstrap START] Initializing new restaurant and owner profile', { restaurantName, email });
+
+        try {
+            const { httpsCallable } = await import('firebase/functions');
+            const { functions } = await import('./lib/firebase');
+            
+            if (!functions) throw new Error("Firebase Functions not initialized");
+
+            const initializeNewRestaurant = httpsCallable(functions, 'initializeNewRestaurant');
+            const result = await initializeNewRestaurant({
+                restaurantName,
+                ownerName,
+                email,
+                phone,
+                password,
+                // Default metadata for Stage 4
+                version: systemConfig?.version || 'v5.3.0'
+            });
+
+            const data = result.data as any;
+            if (!data.success) {
+                throw new Error(data.message || 'Bootstrap initialization failed.');
+            }
+
+            console.log('[Bootstrap SUCCESS] Restaurant and Owner provisioned', { 
+                orgId: data.organizationId, 
+                userId: data.userId 
+            });
+            
+            // Log first audit entry for the new organization
+            logAction('ORGANIZATION_INITIALIZED', 'User', email, ActionOutcome.SUCCESS, `New restaurant "${restaurantName}" established.`);
+            
+            // Refreshing the window or forcing a session check is recommended here 
+            // so AuthContext picks up the new Custom Claims (Stage 5)
+            await refreshIdToken(); 
+            setIsTerminating(false); 
+            
+        } catch (err: any) {
+            console.error('[Bootstrap ERROR] Failed to initialize restaurant:', err);
+            setIsTerminating(false);
+            setSecurityError(`${err.message} (Code: ${err.code || 'unknown'})`);
+            throw err;
+        }
+    }, [systemConfig, logAction]);
+
     if (!systemConfig) {
       if (initTimeout) {
          return (
@@ -1307,7 +1381,10 @@ const App = () => {
              </div>
            </div>
          ) : !user ? (
-           <LoginScreen />
+           <LoginScreen 
+             onRegisterRestaurant={handleRegisterRestaurant}
+             onLoginError={(msg) => setSecurityError(msg)}
+           />
          ) : (categoriesLoading || menuLoading || ordersLoading) ? (
             <div className="flex bg-slate-950 h-screen items-center justify-center">
               <div className="text-center">
@@ -1438,12 +1515,24 @@ const App = () => {
                     onUpdateStaffStatus={handleUpdateStaffStatus}
                     onRegisterStaff={async (name, email, role, password) => {
                         if (!user?.organizationId) {
-                            console.error('[onRegisterStaff ERROR] Precondition failed: User organizationId is missing', { user });
-                            return;
+                            const errorMsg = 'Registration failed: Your current session is not associated with an organization.';
+                            console.error('[onRegisterStaff ERROR] Precondition failed:', { user });
+                            throw new Error(errorMsg);
                         }
                         
-                        console.log('[onRegisterStaff START] Initiating staff registration flow', { name, email, role });
-                        
+                        // Stage 3: Cloud Function RBAC - Client-side validation
+                        const adminRoles: Role[] = ['system_admin', 'super_admin', 'owner'];
+                        const isTargetingAdmin = adminRoles.includes(role);
+                        const currentUserRole = user.role;
+
+                        if (isTargetingAdmin && currentUserRole !== 'system_admin' && currentUserRole !== 'super_admin') {
+                            const errorMsg = `Authorization Denied: Your role (${currentUserRole}) does not have permission to create administrative accounts (${role}).`;
+                            console.error('[onRegisterStaff ERROR] Privilege Escalation Blocked:', { currentUserRole, targetRole: role });
+                            throw new Error(errorMsg);
+                        }
+
+                        console.log('[onRegisterStaff START] Initiating staff registration flow', { name, email, role, organizationId: user.organizationId });
+
                         try {
                             const { httpsCallable } = await import('firebase/functions');
                             const { functions } = await import('./lib/firebase');
@@ -1461,17 +1550,25 @@ const App = () => {
 
                             const data = result.data as any;
                             if (!data.success) {
-                                throw new Error(data.message || 'Unknown error occurred during staff creation');
+                            // Remove internal masking: pass the specific error message and code from the function
+                            const error = new Error(data.message || 'Internal Registration Protocol Error');
+                            (error as any).code = data.code || 'functions/internal';
+                            throw error;
                             }
-                            console.log("STEP 9 After atomic writes - Cloud Function Success", data);
+                        console.log("STEP 9 After atomic writes - Cloud Function Success. Claims set.");
+                        await refreshIdToken();
                         } catch (callError: any) {
-                            console.error('[onRegisterStaff ERROR] Cloud Function rejected!', {
-                                organizationId: user.organizationId,
-                                message: callError?.message,
-                                code: callError?.code,
-                                error: callError
-                            });
-                            throw new Error(`Firestore Atomic Write Failed: ${callError?.message || callError}`);
+                        // Improve diagnostics: Expose underlying Firebase/Firestore error codes
+                        const errorCode = callError.code || callError.details?.code || 'unknown';
+                        console.error('[onRegisterStaff ERROR] Cloud Function rejected!', {
+                            organizationId: user.organizationId,
+                            message: callError.message,
+                            code: errorCode,
+                            details: callError.details
+                        });
+                        
+                        // Throw a descriptive error that include the system code for the UI to display
+                        throw new Error(`${callError.message || 'Registration failed'} (Code: ${errorCode})`);
                         }
 
                         try {

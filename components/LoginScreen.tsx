@@ -12,8 +12,13 @@ const GUEST_AVATARS = [
   { icon: 'fa-fish', color: 'bg-sky-500', name: 'Mizu' },
 ];
 
-export const LoginScreen: React.FC = () => {
-  const [authPath, setAuthPath] = useState<'CHOICE' | 'GUEST' | 'STAFF_AUTH'>('CHOICE');
+interface LoginScreenProps {
+  onRegisterRestaurant?: (restaurantName: string, ownerName: string, email: string, phone: string, password: string) => Promise<void>;
+  onLoginError?: (message: string) => void;
+}
+
+export const LoginScreen: React.FC<LoginScreenProps> = ({ onRegisterRestaurant, onLoginError }) => {
+  const [authPath, setAuthPath] = useState<'CHOICE' | 'GUEST' | 'STAFF_AUTH' | 'RESTAURANT_REG'>('CHOICE');
   const [staffMode, setStaffMode] = useState<'SIGN_IN' | 'SIGN_UP' | 'PENDING' | 'FORGOT_PASSWORD'>('SIGN_IN');
 
   // Guest state
@@ -24,6 +29,10 @@ export const LoginScreen: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [resetSentTo, setResetSentTo] = useState<string | null>(null);
+
+  // Restaurant Bootstrap State
+  const [restaurantName, setRestaurantName] = useState('');
+  const [ownerName, setOwnerName] = useState('');
 
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -90,6 +99,20 @@ export const LoginScreen: React.FC = () => {
       window.history.pushState({path: newUrl}, '', newUrl);
       window.location.reload(); // Quick hack to trigger App.tsx URL parameter read
     }, 800);
+  };
+
+  const handleRestaurantRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setIsLoading(true);
+    try {
+      if (onRegisterRestaurant) {
+        await onRegisterRestaurant(restaurantName, ownerName, email, '', password);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Bootstrap initialization failed.');
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -192,11 +215,11 @@ export const LoginScreen: React.FC = () => {
                 </button>
               </div>
 
-              <div className="pt-6 text-center border-t border-white/5">
+              <div className="pt-6 text-center border-t border-white/5 space-y-4">
                 <p className="text-[11px] font-bold text-slate-600 uppercase tracking-widest mb-4">New to Lumina Dining?</p>
-                <p className="text-[10px] font-black text-brand-500 uppercase tracking-[0.2em]">
-                  Contact Manager for Access
-                </p>
+                <button onClick={() => setAuthPath('RESTAURANT_REG')} className="text-[10px] font-black text-brand-500 uppercase tracking-[0.2em] hover:text-brand-400 transition-colors">
+                  Register Your Restaurant
+                </button>
               </div>
             </div>
           )}
@@ -245,6 +268,46 @@ export const LoginScreen: React.FC = () => {
 
               <Button type="submit" isLoading={isLoading} className="w-full h-24 rounded-[2.5rem] text-lg font-black uppercase tracking-[0.2em] shadow-glow">
                 Initialize Session
+              </Button>
+            </form>
+          )}
+
+          {authPath === 'RESTAURANT_REG' && (
+            <form onSubmit={handleRestaurantRegister} className="space-y-10 animate-in slide-in-from-right-4 duration-500">
+              <div className="flex items-center gap-5">
+                <button type="button" onClick={() => setAuthPath('CHOICE')} className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-slate-400 hover:text-white transition-colors border border-white/10">
+                  <i className="fas fa-arrow-left"></i>
+                </button>
+                <h2 className="text-2xl font-black text-white uppercase tracking-tight italic">System Provisioning</h2>
+              </div>
+
+              {error && (
+                <div className="bg-rose-500/10 border border-rose-500/20 p-5 rounded-2xl text-rose-500 text-[11px] font-black uppercase tracking-widest text-center">
+                   {error}
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] px-2">Restaurant Name</label>
+                  <input required placeholder="e.g. Lumina Dining Hub" value={restaurantName} onChange={e => setRestaurantName(e.target.value)} className="w-full p-5 rounded-2xl bg-white/5 border border-white/10 text-white font-bold outline-none focus:border-brand-500 transition-all placeholder:text-slate-800" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] px-2">Owner Identity</label>
+                  <input required placeholder="Full Name" value={ownerName} onChange={e => setOwnerName(e.target.value)} className="w-full p-5 rounded-2xl bg-white/5 border border-white/10 text-white font-bold outline-none focus:border-brand-500 transition-all placeholder:text-slate-800" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] px-2">Admin Email</label>
+                  <input required type="email" placeholder="owner@luminadining.com" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-5 rounded-2xl bg-white/5 border border-white/10 text-white font-bold outline-none focus:border-brand-500 transition-all placeholder:text-slate-800" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] px-2">Passphrase</label>
+                  <input required type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-5 rounded-2xl bg-white/5 border border-white/10 text-white font-bold outline-none focus:border-brand-500 transition-all placeholder:text-slate-800" />
+                </div>
+              </div>
+
+              <Button type="submit" isLoading={isLoading} className="w-full h-24 rounded-[2.5rem] text-lg font-black uppercase tracking-[0.2em] shadow-glow">
+                Initialize Core Node
               </Button>
             </form>
           )}

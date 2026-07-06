@@ -4,37 +4,40 @@
 // =======================
 // 
 // Role Hierarchy:
-// 1. SUPER_ADMIN: Unlimited cross-organization access (System only)
-// 2. OWNER: Full organization control, billing, destructive actions
-// 3. MANAGER: Operational oversight, personnel, reporting, inventory
-// 4. SUPERVISOR: Shift lead, KDS/POS management, basic inventory limits
-// 5. CASHIER: Order processing, payments, drawer control
-// 6. WAITER: Order entry, table management
-// 7. KITCHEN: KDS view, order preparation
-// 8. VIEWER: Read-only access to menus and floor plans
+// 1. system_admin: Unlimited cross-organization access (System only)
+// 2. super_admin: High-level administrative access
+// 3. owner: Full organization control, billing, destructive actions
+// 4. manager: Operational oversight, personnel, reporting, inventory
+// 5. supervisor: Shift lead, KDS/POS management, basic inventory limits
+// 6. cashier: Order processing, payments, drawer control
+// 7. waiter: Order entry, table management
+// 8. kitchen: KDS view, order preparation
+// 9. viewer: Read-only access to menus and floor plans
 // 9. guest: Customer access (Mobile ordering)
 //
 export type Role =
-  | 'SUPER_ADMIN'
-  | 'OWNER'
-  | 'MANAGER'
-  | 'SUPERVISOR'
-  | 'CASHIER'
-  | 'WAITER'
-  | 'KITCHEN'
-  | 'VIEWER'
+  | 'system_admin'
+  | 'super_admin'
+  | 'owner'
+  | 'manager'
+  | 'supervisor'
+  | 'cashier'
+  | 'waiter'
+  | 'kitchen'
+  | 'viewer'
   | 'guest'
-  | (string & {}); // Allows custom role IDs while keeping standard ones
+  | (string & {}); 
 
 export const STAFF_ROLES: readonly Role[] = [
-  'SUPER_ADMIN',
-  'OWNER',
-  'MANAGER',
-  'SUPERVISOR',
-  'CASHIER',
-  'WAITER',
-  'KITCHEN',
-  'VIEWER',
+  'system_admin',
+  'super_admin',
+  'owner',
+  'manager',
+  'supervisor',
+  'cashier',
+  'waiter',
+  'kitchen',
+  'viewer',
 ];
 
 export const GUEST_ROLE: Role = 'guest';
@@ -77,6 +80,7 @@ export enum UserStatus {
   ACTIVE = 'ACTIVE',
   REJECTED = 'REJECTED',
   SUSPENDED = 'SUSPENDED',
+  INACTIVE = 'INACTIVE',
 }
 
 import { OrderStatus, PaymentStatus } from './types/firestoreSchema';
@@ -99,6 +103,12 @@ export enum TableStatus {
 // CORE MODELS
 // =======================
 
+export interface UserClaims {
+  role: Role;
+  organizationId: string;
+  claimsSetAt: number;
+}
+
 export interface UserProfile {
   uid?: string;
   displayName?: string;
@@ -113,6 +123,7 @@ export interface UserProfile {
   sessionId?: string;
   guestAvatar?: string;
   guestColor?: string;
+  claimsVerified?: boolean;
 }
 
 export interface SystemConfig {
@@ -227,6 +238,7 @@ export interface Table {
 export interface AuditLog {
   id: string;
   timestamp: number;
+  organizationId: string;
   userRole: Role;
   userIdentifier: string;
   action: string;

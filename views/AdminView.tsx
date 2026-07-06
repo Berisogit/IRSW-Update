@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar, Cell, Legend } from 'recharts';
 import { Order, OrderStatus, MenuItem, MenuCategory, Ingredient, Review, Table, AuditLog, Reservation, UserProfile, RoleDefinition, ActionOutcome, ReservationStatus, UserStatus, MenuItemStatus, Permission, Task, TaskStatus, TaskPriority, Role } from '../types';
+import { UserRole } from '../types/shared';
 import { OrderInspectorModal, ConfirmationModal, TaskEditModal } from '../components/Modals';
 import { Button } from '../components/Button';
 import { db } from '../services/databaseService';
@@ -561,25 +562,25 @@ const AdminView: React.FC<AdminViewProps> = ({
         };
     }, [filteredAuditLogs]);
 
-    const getRoleColor = (role: string) => {
-        switch (role?.toUpperCase()) {
-            case 'SUPER_ADMIN':
+    const getRoleColor = (role: Role | string) => {
+        switch (role?.toLowerCase()) {
+            case UserRole.SUPER_ADMIN:
                 return 'bg-violet-500/10 text-violet-500 border border-violet-500/20';
-            case 'OWNER':
+            case UserRole.OWNER:
                 return 'bg-purple-500/10 text-purple-500 border border-purple-500/20';
-            case 'MANAGER':
+            case UserRole.MANAGER:
                 return 'bg-indigo-500/10 text-indigo-500 border border-indigo-500/20';
-            case 'SUPERVISOR':
+            case UserRole.SUPERVISOR:
                 return 'bg-blue-500/10 text-blue-500 border border-blue-500/20';
-            case 'CASHIER':
+            case UserRole.CASHIER:
                 return 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20';
-            case 'WAITER':
+            case UserRole.WAITER:
                 return 'bg-cyan-500/10 text-cyan-500 border border-cyan-500/20';
-            case 'KITCHEN':
+            case UserRole.KITCHEN:
                 return 'bg-amber-500/10 text-amber-500 border border-amber-500/20';
-            case 'VIEWER':
+            case UserRole.VIEWER:
                 return 'bg-slate-500/10 text-slate-500 border border-slate-500/20';
-            case 'GUEST':
+            case UserRole.GUEST:
             default:
                 return 'bg-slate-400/10 text-slate-500 border border-slate-400/10';
         }
@@ -682,7 +683,7 @@ const AdminView: React.FC<AdminViewProps> = ({
         const order = orders.find(o => o.id === orderId);
         if (!order) return false;
 
-        const isAllowedRole = ['SUPER_ADMIN', 'OWNER'].includes(currentUserRole || '');
+        const isAllowedRole = currentUserRole?.toLowerCase() === UserRole.SUPER_ADMIN || currentUserRole?.toLowerCase() === UserRole.OWNER;
         if (!isAllowedRole) return false;
 
         // Determine if legacy
@@ -1513,7 +1514,7 @@ const AdminView: React.FC<AdminViewProps> = ({
                                     const formData = new FormData(e.currentTarget);
                                     const name = formData.get('name') as string;
                                     const email = formData.get('email') as string;
-                                    const role = formData.get('role') as Role;
+                                    const role = (formData.get('role') as string)?.toLowerCase() as Role;
                                     const password = formData.get('password') as string;
                                     
                                     if (name && email && role && password && onRegisterStaff) {
@@ -1538,7 +1539,7 @@ const AdminView: React.FC<AdminViewProps> = ({
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Assigned Role</label>
                                     <select required name="role" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-brand-500 transition-colors">
-                                        {roleDefinitions.filter(r => r.id !== 'SUPER_ADMIN').map(r => (
+                                        {roleDefinitions.filter(r => r.id?.toLowerCase() !== UserRole.SUPER_ADMIN).map(r => (
                                             <option key={r.id} value={r.id}>{r.name}</option>
                                         ))}
                                     </select>
@@ -1741,7 +1742,7 @@ const AdminView: React.FC<AdminViewProps> = ({
                 {activeSection === 'ADMIN_INVENTORY' && (
                     <div className="w-full h-full overflow-y-auto custom-scrollbar pb-20">
                         {/* Sub-tab selection with RBAC controls */}
-                        {['SUPER_ADMIN', 'OWNER', 'MANAGER'].includes(currentUserRole || '') && (
+                        {[UserRole.SUPER_ADMIN, UserRole.OWNER, UserRole.MANAGER].includes(currentUserRole?.toLowerCase() as UserRole || '') && (
                             <div className="flex gap-4 mb-8 border-b border-slate-100/80 dark:border-slate-800 pb-5 px-1 shrink-0">
                                 <button
                                     onClick={() => setInventorySubTab('STOCK')}
@@ -2110,7 +2111,7 @@ const AdminView: React.FC<AdminViewProps> = ({
                                                                             </button>
                                                                         ) : (
                                                                             <span className="text-[8px] font-black uppercase text-slate-300 dark:text-slate-600 select-none pb-0.5 border-b border-dashed border-slate-200 dark:border-slate-800">
-                                                                                {currentUserRole === 'MANAGER' ? 'ReadOnly Account' : 'Action Unavailable'}
+                                                                                {currentUserRole?.toLowerCase() === UserRole.MANAGER ? 'ReadOnly Account' : 'Action Unavailable'}
                                                                             </span>
                                                                         )}
                                                                     </div>

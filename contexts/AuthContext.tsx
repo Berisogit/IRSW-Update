@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { auth, db } from '../lib/firebase';
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { onIdTokenChanged, User as FirebaseUser } from 'firebase/auth';
 import { writeBatch, doc } from 'firebase/firestore';
 import { firestore } from '../services/firestoreService';
 import { UserProfile, Role, UserStatus } from '../types';
@@ -40,8 +40,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const initUser = async (firebaseUser: FirebaseUser) => {
     try {
       setAuthError(null);
+
+      // AUTHORITY: Parse custom claims from the ID token (ADR-001 Identity & RBAC)
+      const idTokenResult = await firebaseUser.getIdTokenResult();
+      const claims = idTokenResult.claims;
       
-      console.log('Firebase UID:', firebaseUser.uid);
+      console.log('Firebase UID:', firebaseUser.uid, 'Claims detected:', claims);
 
       let userDocData = await firestore.users.getById(firebaseUser.uid);
       
@@ -84,7 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             email: uEmail,
             displayName: formattedName,
             name: formattedName,
-            role: 'OWNER' as Role,
+            phone: '',
+            role: 'owner' as Role,
             globalRole: 'USER' as const,
             status: UserStatus.ACTIVE,
             defaultOrganizationId: orgId,
@@ -106,8 +111,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             lastName: formattedName.split(' ').slice(1).join(' ') || 'Owner',
             displayName: formattedName,
             email: uEmail,
+            phone: '',
             staffCode: `STF-${uId.slice(0, 5).toUpperCase()}`,
-            role: 'OWNER' as Role,
+            role: 'owner' as Role,
             status: 'ACTIVE',
             organizationId: orgId,
             createdAt: Date.now(),
@@ -117,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const bootstrappedMembership = {
             userId: uId,
             organizationId: orgId,
-            role: 'OWNER' as Role,
+            role: 'owner' as Role,
             status: 'active',
             createdAt: Date.now(),
             updatedAt: Date.now(),
@@ -139,9 +145,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       console.log('UserDoc (after membership query):', userDocData);
 
-      let role: Role | null = null;
+      let role: Role | null = (claims.role as string)?.toLowerCase() as Role || null;
       let displayName = firebaseUser.email?.split('@')[0] || 'User';
-      let organizationId: string | null = null;
+      let organizationId: string | null = (claims.organizationId as string) || null;
       let defaultOrganizationId = null;
       let name = displayName;
       let phone = '';
@@ -157,73 +163,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = userDocData as any;
       const actualUserId = data.id || firebaseUser.uid;
       
-      role = data.role as Role || null;
+      // Hydrate missing authorization identifiers from Firestore if claims aren't set yet
+      role = role || (data.role as string)?.toLowerCase() as Role || null;
+      organizationId = organizationId || data.organizationId || null;
+
       name = data.name || name;
       displayName = data.displayName || name;
       defaultOrganizationId = data.defaultOrganizationId || null;
-      organizationId = data.organizationId || null;
       phone = data.phone || phone;
       photoFileName = data.photoFileName || photoFileName;
       status = data.status || status;
 
       // 2. Load Organization Memberships & Explicit Resolution
-      const memberships = await firestore.memberships.executeQuery({
+      // Skip resolution if organization is already established via claims
+      const memberships = organizationId ? [] : await firestore.memberships.executeQuery({
         where: [
           { field: 'userId', operator: '==', value: actualUserId },
           { field: 'status', operator: '==', value: 'active' }
         ]
       });
-      
-      console.log('Memberships:', memberships);
 
-      if (memberships.length === 0) {
+      if (memberships.length === 0 && !organizationId) {
         setAuthError({ type: 'organization', message: 'No active organization memberships found. Access denied.' });
         setLoading(false);
         return;
       }
 
-      let activeMembership = null;
+      if (!organizationId) {
+        let activeMembership = null;
 
-      // Try defaultOrganizationId first
-      if (defaultOrganizationId) {
-        activeMembership = memberships.find((d: any) => d.organizationId === defaultOrganizationId);
-      }
-
-      // If not found or not valid, check if only one membership exists
-      if (!activeMembership) {
-        if (memberships.length === 1) {
-          activeMembership = memberships[0];
-        } else {
-          // Multiple memberships exist, prepare for switcher
-          // For now, use the first one but log/mark for future switcher implementation
-          // We don't arbitrarily select docs[0] without validation
-          setAuthError({ type: 'organization', message: 'Multiple organizations found. Organization switcher not yet implemented.' });
-          setLoading(false);
-          return;
+        // Try defaultOrganizationId first
+        if (defaultOrganizationId) {
+          activeMembership = memberships.find((d: any) => d.organizationId === defaultOrganizationId);
         }
-      }
 
-      const membershipDoc = activeMembership as any;
-      organizationId = membershipDoc.organizationId;
+        // If not found or not valid, check if only one membership exists
+        if (!activeMembership) {
+          if (memberships.length === 1) {
+            activeMembership = memberships[0];
+          } else {
+            setAuthError({ type: 'organization', message: 'Multiple organizations found. Organization switcher not yet implemented.' });
+            setLoading(false);
+            return;
+          }
+        }
+        organizationId = (activeMembership as any).organizationId;
+      }
       
       console.log('OrganizationId:', organizationId);
       
       // Look up tenant staff record to get the authoritative role and status
       try {
         const staffDocSnap = await firestore.staff.getById(organizationId as string, actualUserId);
-        console.log('StaffDoc:', staffDocSnap);
         if (staffDocSnap) {
+           console.log('StaffDoc:', staffDocSnap);
            const staffData = staffDocSnap as any;
-           role = staffData.role as Role || null;
+           role = role || (staffData.role as string)?.toLowerCase() as Role || null;
            status = staffData.status || status;
            name = staffData.displayName || staffData.firstName || name;
-        } else {
-           console.warn('Tenant staff record missing. Role cannot be established.');
-           role = null;
         }
       } catch (e) {
         console.warn('Failed to fetch tenant staff document', e);
-        role = null;
       }
 
       if (!role) {
@@ -262,7 +262,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+    const unsubscribe = onIdTokenChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       setFireUser(firebaseUser);
       if (firebaseUser) {
         setLoading(true);
