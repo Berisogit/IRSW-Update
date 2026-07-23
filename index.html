@@ -34,10 +34,18 @@
         });
 
         window.addEventListener('unhandledrejection', function(e) {
+          const reason = e.reason instanceof Error ? e.reason.message : String(e.reason ?? '');
+          const message = reason.toLowerCase();
+          const isIgnorableViteHmrError = message.includes('websocket closed without opened') || message.includes('failed to connect to websocket');
+
+          if (isIgnorableViteHmrError) {
+            return;
+          }
+
           const el = document.getElementById('debug-console');
           if (el) {
             el.style.display = 'block';
-            el.innerHTML += '[UNHANDLED PROMISE REJECTION] ' + e.reason + '\n';
+            el.innerHTML += '[UNHANDLED PROMISE REJECTION] ' + reason + '\n';
           }
         });
       })();

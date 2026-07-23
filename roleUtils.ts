@@ -72,3 +72,5 @@ export const canWriteOrders = (role: Role): boolean =>
 export const canProcessPayments = (role: Role): boolean =>
     isAtLeast(role, "owner");
 
+export const canManageInventory = (role: Role): boolean =>
+    isAtLeast(role, 'manager');

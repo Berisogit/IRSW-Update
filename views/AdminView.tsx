@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar, Cell, Legend } from 'recharts';
 import { Order, OrderStatus, MenuItem, MenuCategory, Ingredient, Review, Table, AuditLog, Reservation, UserProfile, RoleDefinition, ActionOutcome, ReservationStatus, UserStatus, MenuItemStatus, Permission, Task, TaskStatus, TaskPriority, Role } from '../types';
-import { UserRole } from '../types/shared';
+import { UserRole, INVENTORY_ADMIN_ROLES } from '../types/shared';
 import { OrderInspectorModal, ConfirmationModal, TaskEditModal } from '../components/Modals';
 import { Button } from '../components/Button';
 import { db } from '../services/databaseService';
@@ -16,6 +16,7 @@ import { firestore } from '../services/firestoreService';
 import { FoodCostService, MonthlyCOGSResult, MenuItemProfitabilityRecord, TopPerformingItemsResult, MenuItemProfitabilityResult } from '../services/foodCostService';
 import { ForecastingService, ScenarioParameters, ForecastingReport, ForecastItem } from '../services/forecastingService';
 import { ProcurementIntelligenceService, ProcurementDashboard, ProcurementItemReport, ABCAnalysis } from '../services/procurementIntelligenceService';
+import { canManageInventory } from '../roleUtils';
 
 interface AdminViewProps {
     activeSection: string;
@@ -40,7 +41,7 @@ interface AdminViewProps {
     onUpdateTable?: (table: Table) => void;
     onAddMenuItems?: (items: Partial<MenuItem>[]) => void;
     onUpdateStaffStatus?: (phone: string, status: UserStatus) => void;
-    onRegisterStaff?: (name: string, email: string, role: Role, password: string) => Promise<void>;
+    onRegisterStaff?: (name: string, email: string, role: Role, password: string, phone: string) => Promise<void>;
     currentUserRole?: Role;
     onCreateIngredient?: (ing: Partial<Ingredient>) => void;
     onUpdateIngredient?: (id: string, updates: Partial<Ingredient>) => void;
@@ -1516,10 +1517,11 @@ const AdminView: React.FC<AdminViewProps> = ({
                                     const email = formData.get('email') as string;
                                     const role = (formData.get('role') as string)?.toLowerCase() as Role;
                                     const password = formData.get('password') as string;
+                                    const phone = formData.get('phone') as string;
                                     
-                                    if (name && email && role && password && onRegisterStaff) {
+                                    if (name && email && role && password && phone && onRegisterStaff) {
                                         try {
-                                            await onRegisterStaff(name, email, role, password);
+                                            await onRegisterStaff(name, email, role, password, phone);
                                             (e.target as HTMLFormElement).reset();
                                         } catch (err) {
                                             alert(err);
@@ -1535,6 +1537,16 @@ const AdminView: React.FC<AdminViewProps> = ({
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Secure Link (Email)</label>
                                     <input required name="email" type="email" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-brand-500 transition-colors" placeholder="crew@luminadining.com" />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Phone Number</label>
+                                    <input 
+                                        required 
+                                        name="phone" 
+                                        type="tel" 
+                                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white outline-none focus:border-brand-500 transition-colors" 
+                                        placeholder="+251 9XX XXX XXX" 
+                                    />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Assigned Role</label>
@@ -1574,7 +1586,7 @@ const AdminView: React.FC<AdminViewProps> = ({
                                         <div className="flex justify-between items-center">
                                             <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Protocol status</span>
                                             <span className={`text-[9px] font-black uppercase tracking-widest ${staff.status === UserStatus.ACTIVE ? 'text-emerald-500' : staff.status === UserStatus.PENDING_APPROVAL ? 'text-amber-500 animate-pulse' : 'text-rose-500'}`}>
-                                                {staff.status.replace(/_/g, ' ')}
+                                                {(staff.status ?? UserStatus.PENDING_APPROVAL).replace(/_/g, ' ')}
                                             </span>
                                         </div>
                                     </div>
@@ -1742,7 +1754,7 @@ const AdminView: React.FC<AdminViewProps> = ({
                 {activeSection === 'ADMIN_INVENTORY' && (
                     <div className="w-full h-full overflow-y-auto custom-scrollbar pb-20">
                         {/* Sub-tab selection with RBAC controls */}
-                        {[UserRole.SUPER_ADMIN, UserRole.OWNER, UserRole.MANAGER].includes(currentUserRole?.toLowerCase() as UserRole || '') && (
+                        {currentUserRole && canManageInventory(currentUserRole) && (
                             <div className="flex gap-4 mb-8 border-b border-slate-100/80 dark:border-slate-800 pb-5 px-1 shrink-0">
                                 <button
                                     onClick={() => setInventorySubTab('STOCK')}

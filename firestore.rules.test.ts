@@ -63,6 +63,29 @@ describe('Firestore Rules - The Dirty Dozen', () => {
     }));
   });
 
+  test('Prevents clients from creating profile documents', async () => {
+    const db = testEnv.authenticatedContext('tenant_user', { organizationId: 'org1', role: 'waiter' }).firestore();
+    await assertFails(db.doc('users/tenant_user').set({
+      id: 'tenant_user',
+      displayName: 'Tenant User',
+      role: 'waiter',
+      createdAt: 12345,
+      updatedAt: 12345
+    }));
+  });
+
+  test('Prevents clients from creating membership documents', async () => {
+    const db = testEnv.authenticatedContext('tenant_user', { organizationId: 'org1', role: 'waiter' }).firestore();
+    await assertFails(db.doc('memberships/org1_tenant_user').set({
+      userId: 'tenant_user',
+      organizationId: 'org1',
+      role: 'waiter',
+      status: 'ACTIVE',
+      createdAt: 12345,
+      updatedAt: 12345
+    }));
+  });
+
   // 2. Tenant Bleeding
   test('Prevents reading other orgs data', async () => {
     const db = testEnv.authenticatedContext('stranger_uid', { organizationId: 'org_other', role: 'owner' }).firestore();

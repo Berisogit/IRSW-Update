@@ -1,32 +1,101 @@
 rules_version = '2';
+
 service cloud.firestore {
+
   match /databases/{database}/documents {
-    // Authoritative Rule for Audit Logs (Provisioning & Rollback events)
-    match /auditLogs/{logId} {
-      allow read: if request.auth != null && (
-        // Tenant isolation: Managers and Owners can only read logs for their organization
-        (request.auth.token.organizationId == resource.data.organizationId &&
-         request.auth.token.role in ['manager', 'owner']) ||
-        // Global oversight: System and Super Admins can access all logs for forensics
-        request.auth.token.role in ['system_admin', 'super_admin']
-      );
 
-      // Integrity: Audit logs are immutable and can only be created by the system via Cloud Functions
+
+    // =========================================================
+    // USER PROFILES
+    // =========================================================
+  match /users/{userId} {
+
+    allow read: if request.auth != null;
+
+    allow write: if request.auth != null;
+
+      // Profile documents are provisioned by authorized backend processes only.
       allow write: if false;
     }
 
-    // Membership rules for tenant isolation and profile hydration
+
+
+    // =========================================================
+    // MEMBERSHIPS
+    // =========================================================
     match /memberships/{membershipId} {
-      allow read: if request.auth != null && (
-        // Users can always read their own memberships to facilitate login/bootstrap
-        request.auth.uid == resource.data.userId ||
-        // Managers and Owners can read memberships within their organization for personnel management
-        (request.auth.token.organizationId == resource.data.organizationId &&
-         request.auth.token.role in ['manager', 'owner', 'super_admin', 'system_admin'])
-      );
 
-      // Managed via Cloud Functions to ensure synchronization with Auth Custom Claims
+      allow read: if request.auth != null
+                  && (
+                    request.auth.uid == resource.data.userId
+                    ||
+                    (
+                      request.auth.token.organizationId 
+                      == resource.data.organizationId
+                      &&
+                      request.auth.token.role 
+                      in ['manager',
+                          'owner',
+                          'super_admin',
+                          'system_admin']
+                    )
+                  );
+
+
+      // Memberships are managed by backend processes only.
       allow write: if false;
     }
+
+
+
+
+    // =========================================================
+    // AUDIT LOGS
+    // =========================================================
+    match /auditLogs/{logId} {
+
+
+      allow read: if request.auth != null
+                  &&
+                  (
+                    (
+                      request.auth.token.organizationId
+                      == resource.data.organizationId
+                      &&
+                      request.auth.token.role
+                      in ['manager','owner']
+                    )
+                    ||
+                    request.auth.token.role
+                    in ['system_admin','super_admin']
+                  );
+
+
+      // Immutable
+      allow write: if false;
+    }
+
+
+
+    // =========================================================
+    // ORGANIZATIONS
+    // =========================================================
+   match /organizations/{organizationId} {
+
+    allow read: if request.auth != null;
+
+    allow write: if false;
+}
+match /organizations/{organizationId}/{document=**} {
+
+    allow read: if request.auth != null;
+
+    allow write: if request.auth != null;
+}
+
+    // =========================================================
+    // DEFAULT DENY
+    // =========================================================
+
   }
 }

@@ -1,7 +1,9 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 
 import { UserRole, UserStatus, AuditOutcome } from './types/shared';
+import { applyOrganizationMemberProvisioningToBatch, setOrganizationClaims } from './provisioning';
 admin.initializeApp();
 
 /**
@@ -56,7 +58,13 @@ export const createStaffUser = onCall(async (request) => {
 
   const callerData = callerStaffDoc.data();
   const callerRole = callerData?.role;
-
+console.log("[PERMISSION DEBUG]", {
+  callerRole,
+  OWNER: UserRole.OWNER,
+  MANAGER: UserRole.MANAGER,
+  SUPER_ADMIN: UserRole.SUPER_ADMIN,
+  SYSTEM_ADMIN: UserRole.SYSTEM_ADMIN,
+});
   if (
     callerRole !== UserRole.MANAGER && 
     callerRole !== UserRole.OWNER && 
@@ -69,6 +77,14 @@ export const createStaffUser = onCall(async (request) => {
   let createdUid: string | null = null;
 
   try {
+    console.log('[IRSW Functions] createStaffUser invoked', {
+      action: 'create-staff-user-start',
+      callerUid: auth.uid,
+      organizationId,
+      role,
+      email,
+    });
+
     // 2. Create Firebase Auth user
     const userRecord = await admin.auth().createUser({
       email,
@@ -80,59 +96,25 @@ export const createStaffUser = onCall(async (request) => {
     const uid = userRecord.uid;
     const normalizedRole = role.toLowerCase() as UserRole; // Ensure it's a valid UserRole
 
-    const staffData = {
+    console.log('[IRSW Functions] Auth user created', {
+      action: 'create-staff-user-auth-created',
       uid,
-      firstName: name.split(' ')[0],
-      lastName: name.split(' ').slice(1).join(' '),
-      displayName: name,
-      email,
-      phone,
-      staffCode: uid, // Using UID as fallback for staffCode
-      role: normalizedRole,
-      assignedRoles: [normalizedRole],
-      status: UserStatus.ACTIVE,
       organizationId,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      createdBy: callerId,
-    };
+      role: normalizedRole,
+    });
 
-    const userData = {
+    // 3. Execute Atomically
+    const writeBatch = db.batch();
+    applyOrganizationMemberProvisioningToBatch(writeBatch, {
+      uid,
       email,
       name,
       phone,
       role: normalizedRole,
       organizationId,
-      status: UserStatus.ACTIVE,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
-
-    const membershipId = `${organizationId}_${uid}`;
-    const membershipData = {
-      id: membershipId,
-      userId: uid,
-      organizationId,
-      role: normalizedRole,
-      status: UserStatus.ACTIVE,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       createdBy: callerId,
-    };
-
-    // 3. Execute Atomically
-    const writeBatch = db.batch();
-
-    // Create users/{uid}
-    const userRef = db.doc(`users/${uid}`);
-    writeBatch.set(userRef, userData);
-
-    // Create organizations/{orgId}/staff/{uid}
-    const staffRef = db.doc(`organizations/${organizationId}/staff/${uid}`);
-    writeBatch.set(staffRef, staffData);
-
-    // Create memberships/{orgId}_{uid}
-    const membershipRef = db.doc(`memberships/${membershipId}`);
-    writeBatch.set(membershipRef, membershipData);
+      status: UserStatus.ACTIVE,
+    });
 
     // 4. Log the action
     appendAuditLog(writeBatch, {
@@ -147,12 +129,34 @@ export const createStaffUser = onCall(async (request) => {
     });
 
     // 5. Commit database changes first
+    console.log('[IRSW Functions] Committing provisioning batch', {
+      action: 'create-staff-user-provisioning-commit',
+      uid,
+      organizationId,
+      membershipId: `${organizationId}_${uid}`,
+    });
     await writeBatch.commit();
 
     // 6. Set Custom Claims only after database confirmation
-    await admin.auth().setCustomUserClaims(uid, {
+    console.log('[IRSW Functions] Assigning custom claims', {
+      action: 'create-staff-user-claims-request',
+      uid,
       organizationId,
-      role: normalizedRole
+      role: normalizedRole,
+    });
+    await setOrganizationClaims(uid, organizationId, normalizedRole);
+    console.log('[IRSW Functions] Custom claims assigned', {
+      action: 'create-staff-user-claims-success',
+      uid,
+      organizationId,
+      role: normalizedRole,
+    });
+
+    console.log('[IRSW Functions] createStaffUser completed', {
+      action: 'create-staff-user-complete',
+      uid,
+      organizationId,
+      role: normalizedRole,
     });
 
     return {
@@ -209,6 +213,12 @@ export const initializeNewRestaurant = onCall(async (request) => {
   let organizationId: string | null = null;
 
   try {
+    console.log('[IRSW Functions] initializeNewRestaurant invoked', {
+      action: 'initialize-new-restaurant-start',
+      email,
+      restaurantName,
+    });
+
     // 1. Create Firebase Auth user
     const userRecord = await admin.auth().createUser({
       email,
@@ -220,6 +230,12 @@ export const initializeNewRestaurant = onCall(async (request) => {
     const orgRef = db.collection('organizations').doc();
     organizationId = orgRef.id;
 
+    console.log('[IRSW Functions] Auth owner created', {
+      action: 'initialize-new-restaurant-auth-created',
+      uid,
+      organizationId,
+    });
+
     // 2. Prepare Data (Lowercase role 'owner' per ADR vocabulary)
     const orgData = {
       id: organizationId,
@@ -228,57 +244,25 @@ export const initializeNewRestaurant = onCall(async (request) => {
       plan: 'PRO',
       contactEmail: email,
       settings: { version: version || 'v5.3.0' },
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
       createdBy: 'SYSTEM_BOOTSTRAP',
       ownerId: uid,
-    };
-
-    const staffData = {
-      uid: uid,
-      firstName: ownerName.split(' ')[0],
-      lastName: ownerName.split(' ').slice(1).join(' '),
-      displayName: ownerName,
-      email,
-      phone,
-      staffCode: uid,
-      role: UserRole.OWNER,
-      assignedRoles: [UserRole.OWNER],
-      status: UserStatus.ACTIVE,
-      organizationId,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      createdBy: 'SYSTEM_BOOTSTRAP',
-    };
-
-    const userData = {
-      email,
-      name: ownerName,
-      phone,
-      role: UserRole.OWNER,
-      organizationId,
-      status: UserStatus.ACTIVE,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
-
-    const membershipId = `${organizationId}_${uid}`;
-    const membershipData = {
-      id: membershipId,
-      userId: uid,
-      organizationId,
-      role: UserRole.OWNER,
-      status: UserStatus.ACTIVE,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      createdBy: 'SYSTEM_BOOTSTRAP',
     };
 
     // 3. Prepare Batch
     const writeBatch = db.batch();
     writeBatch.set(orgRef, orgData);
-    writeBatch.set(db.doc(`users/${uid}`), userData);
-    writeBatch.set(db.doc(`organizations/${organizationId}/staff/${uid}`), staffData);
-    writeBatch.set(db.doc(`memberships/${membershipId}`), membershipData);
+    applyOrganizationMemberProvisioningToBatch(writeBatch, {
+      uid,
+      email,
+      name: ownerName,
+      phone,
+      role: UserRole.OWNER,
+      organizationId,
+      createdBy: 'SYSTEM_BOOTSTRAP',
+      status: UserStatus.ACTIVE,
+    });
 
     // 4. Log the bootstrap event
     appendAuditLog(writeBatch, {
@@ -293,12 +277,33 @@ export const initializeNewRestaurant = onCall(async (request) => {
     });
 
     // 4. Set Custom Claims for RBAC (Organization Isolation)
-    await admin.auth().setCustomUserClaims(uid, {
+    console.log('[IRSW Functions] Assigning custom claims', {
+      action: 'initialize-new-restaurant-claims-request',
+      uid,
       organizationId,
-      role: UserRole.OWNER
+      role: UserRole.OWNER,
+    });
+    await setOrganizationClaims(uid, organizationId, UserRole.OWNER);
+    console.log('[IRSW Functions] Custom claims assigned', {
+      action: 'initialize-new-restaurant-claims-success',
+      uid,
+      organizationId,
+      role: UserRole.OWNER,
     });
 
+    console.log('[IRSW Functions] Committing provisioning batch', {
+      action: 'initialize-new-restaurant-provisioning-commit',
+      uid,
+      organizationId,
+      membershipId: `${organizationId}_${uid}`,
+    });
     await writeBatch.commit();
+
+    console.log('[IRSW Functions] initializeNewRestaurant completed', {
+      action: 'initialize-new-restaurant-complete',
+      uid,
+      organizationId,
+    });
 
     return {
       success: true,

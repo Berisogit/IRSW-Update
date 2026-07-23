@@ -125,19 +125,49 @@ export class RootRepository<T extends { id: string }> {
     this.collectionPath = collectionPath;
   }
 
-  async getById(id: string): Promise<T | null> {
-    try {
-      const docRef = doc(this.db, this.collectionPath, id);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        return { id: docSnap.id, ...docSnap.data() } as T;
-      }
-      return null;
-    } catch (error) {
-      handleFirestoreError(error, OperationType.GET, `${this.collectionPath}/${id}`);
-    }
-  }
+ async getById(id: string): Promise<T | null> {
 
+    const docRef = doc(this.db, this.collectionPath, id);
+
+    console.log("========== RootRepository.getById ==========");
+    console.log("Collection:", this.collectionPath);
+    console.log("Requested ID:", id);
+    console.log("Firestore path:", docRef.path);
+    console.log("Firebase Project:", this.db.app.options.projectId);
+
+    try {
+        const docSnap = await getDoc(docRef);
+
+        console.log("========== Firestore Response ==========");
+        console.log("Document exists:", docSnap.exists());
+
+        if (!docSnap.exists()) {
+            console.log("Document NOT FOUND");
+            console.log("Requested path:", docRef.path);
+            return null;
+        }
+
+        console.log("Document FOUND");
+        console.log("Data:", docSnap.data());
+
+        return {
+            id: docSnap.id,
+            ...docSnap.data(),
+        } as T;
+
+    } catch (error) {
+
+        console.error("========== Firestore Exception ==========");
+        console.error(error);
+
+        handleFirestoreError(
+            error,
+            OperationType.GET,
+            `${this.collectionPath}/${id}`
+        );
+    }
+
+} 
   async find(constraints: QueryConstraint[] = []): Promise<T[]> {
     try {
       const q = query(collection(this.db, this.collectionPath), ...constraints);

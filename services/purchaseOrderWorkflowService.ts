@@ -9,7 +9,7 @@ export class PurchaseOrderWorkflowService {
    * Submit a PO for approval
    */
   static async submitForApproval(organizationId: string, purchaseOrderId: string, userId: string, userRole: string): Promise<void> {
-    if (!['SUPER_ADMIN', 'OWNER', 'MANAGER'].includes(userRole)) {
+    if (!['super_admin', 'system_admin', 'owner', 'manager'].includes(userRole)) {
       throw new Error(`Role ${userRole} is not authorized to submit purchase orders.`);
     }
 

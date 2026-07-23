@@ -143,19 +143,19 @@ export const askAssistant = async (
       RESTRICTIONS: You MUST NOT expose internal staff workflows, system logic, or sensitive backend details. 
       Refuse questions about staff training, kitchen preparation stages (beyond simple status), or administrative settings.
       If a guest asks about an item that is not in your filtered menu context, state that it is currently unavailable or not offered.`;
-    } else if (currentRole === 'KITCHEN' || currentRole === 'WAITER' || currentRole === 'SUPERVISOR') {
+    } else if (currentRole === 'kitchen' || currentRole === 'waiter' || currentRole === 'supervisor') {
       roleSpecificInstructions = `
       USER ROLE: Operations Staff (${currentRole}).
       PERMISSIONS: Provide SOP (Standard Operating Procedure) guidance. 
       FOCUS: Explain how orders move through the system, how invoices are generated automatically upon settlement, and how to record operational steps.
       STYLE: Technical and structured.`;
-    } else if (currentRole === 'CASHIER') {
+    } else if (currentRole === 'cashier') {
       roleSpecificInstructions = `
       USER ROLE: Cashier.
       PERMISSIONS: Financial explanation only.
       FOCUS: Explain payment methods, transaction recording, and the read-only invoice tracking protocol.
       RESTRICTIONS: Remind the user that invoices are system-triggered and unalterable.`;
-    } else if (currentRole === 'OWNER' || currentRole === 'MANAGER' || currentRole === 'SUPER_ADMIN') {
+    } else if (currentRole === 'owner' || currentRole === 'manager' || currentRole === 'super_admin' || currentRole === 'system_admin') {
       const auditSummary = audit && audit.length > 0 
         ? audit.slice(0, 10).map(l => `[${new Date(l.timestamp).toLocaleTimeString()}] ${l.action} by ${l.userRole}:${l.userIdentifier}`).join('; ')
         : "No recent events recorded.";

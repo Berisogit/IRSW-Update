@@ -41,14 +41,15 @@ export const signInWithGoogle = async (): Promise<AuthResponse> => {
     let name = result.user?.displayName || 'Guest';
     let defaultOrganizationId = null;
 
-    // Check if they are registered in users collection
+           // Check if user is registered in root users collection
     const userDocData = await firestore.users.getById(result.user.uid);
 
     if (userDocData) {
       const data = userDocData as any;
+
       role = data.role as Role || null;
-      name = data.name || name;
-      defaultOrganizationId = data.defaultOrganizationId || null;
+      name = data.name || data.displayName || name;
+      defaultOrganizationId = data.organizationId || null;
     }
 
     if (!role) {
@@ -56,7 +57,7 @@ export const signInWithGoogle = async (): Promise<AuthResponse> => {
       const memberships = await firestore.memberships.executeQuery({
         where: [
           { field: 'userId', operator: '==', value: result.user.uid },
-          { field: 'status', operator: '==', value: 'active' }
+          { field: 'status', operator: '==', value: 'ACTIVE' }
         ]
       });
 

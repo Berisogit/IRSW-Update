@@ -16,16 +16,37 @@ export class ErrorBoundary extends Component<Props, State> {
     error: null
   };
 
+  private static isIgnorableDevelopmentError(error: Error | unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    const isDevelopment = typeof import.meta !== 'undefined' && 'env' in import.meta && Boolean((import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV);
+    if (!isDevelopment) {
+      return false;
+    }
+
+    const message = error.message.toLowerCase();
+    return (
+      message.includes('websocket closed without opened') ||
+      message.includes('failed to connect to websocket')
+    );
+  }
+
   public static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    if (ErrorBoundary.isIgnorableDevelopmentError(error)) {
+      return;
+    }
+
     console.error("Uncaught error:", error, errorInfo);
   }
 
   public render() {
-    if (this.state.hasError) {
+    if (this.state.hasError && !ErrorBoundary.isIgnorableDevelopmentError(this.state.error)) {
       if (this.props.fallback) {
         return this.props.fallback;
       }

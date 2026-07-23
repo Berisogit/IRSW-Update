@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "demo-restaurant-os"
-  }
+    "default": "my-fine-apps"
+  },
+  "targets": {},
+  "etags": {}
 }

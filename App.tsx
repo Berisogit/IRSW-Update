@@ -1,5 +1,5 @@
-
 import React, { useState, useMemo, Suspense, useCallback, useEffect } from 'react';
+import { auth, functions } from './lib/firebase';
 import { 
   Role, 
   Order, 
@@ -24,26 +24,36 @@ import {
   TableStatus,
   Ingredient
 } from './types';
+
 import { 
   INITIAL_CATEGORIES, 
   INITIAL_MENU, 
   INITIAL_TABLES,
   INITIAL_INGREDIENTS,
-  // Added RESTAURANT_NAME to imports
   RESTAURANT_NAME
 } from './constants';
+
 import { useAuth } from './contexts/AuthContext';
 import { useRole } from './hooks/useRole';
+
 import { Sidebar } from './components/Sidebar';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { InitializationBlocker } from './components/InitializationBlocker';
 import { LoginScreen } from './components/LoginScreen';
+
 import { logoutUser } from './utils/auth';
-import { signOutStaff, getAllStaff, updateStaffStatus } from './services/authService';
+
+import { 
+  signOutStaff, 
+  getAllStaff, 
+  updateStaffStatus 
+} from './services/authService';
+
 import { db } from './services/databaseService';
 import { firestore } from './services/firestoreService';
 import { captureOrderItemSnapshot } from './services/orderSnapshotService';
 import { InventoryPostingEngine } from './services/inventoryPostingEngine';
+
 import { 
     ClearCartConfirmationModal,
     AssistantModal, 
@@ -53,8 +63,9 @@ import {
     CustomerHistoryModal,
     LogoutConfirmationModal
 } from './components/Modals';
-import { QRScannerModal } from './components/QRScannerModal';
 
+import { QRScannerModal } from './components/QRScannerModal';
+import { httpsCallable } from 'firebase/functions';
 const POSView = React.lazy(() => import('./views/POSView'));
 const KDSView = React.lazy(() => import('./views/KDSView'));
 const AdminView = React.lazy(() => import('./views/AdminView'));
@@ -84,6 +95,7 @@ const PREFS_THEME_KEY = 'irsw_theme';
 
 const MOCK_HISTORICAL_LOGS: AuditLog[] = [
   {
+    organizationId: "demo-id",
     id: 'log_mock_1',
     timestamp: Date.now() - 5 * 60 * 1000, // 5 mins ago
     userRole: 'manager',
@@ -94,7 +106,9 @@ const MOCK_HISTORICAL_LOGS: AuditLog[] = [
     outcome: ActionOutcome.SUCCESS,
     notes: 'Approved high-value corporate lunch ticket manually.'
   },
-  {
+    
+    {
+    organizationId: "demo-id",
     id: 'log_mock_2',
     timestamp: Date.now() - 35 * 60 * 1000, // 35 mins ago
     userRole: 'kitchen',
@@ -106,6 +120,7 @@ const MOCK_HISTORICAL_LOGS: AuditLog[] = [
     outcome: ActionOutcome.SUCCESS
   },
   {
+    organizationId: "demo-id",
     id: 'log_mock_3',
     timestamp: Date.now() - 2 * 3600 * 1000, // 2 hours ago
     userRole: 'manager',
@@ -117,6 +132,7 @@ const MOCK_HISTORICAL_LOGS: AuditLog[] = [
     outcome: ActionOutcome.SUCCESS
   },
   {
+    organizationId: "demo-id",
     id: 'log_mock_4',
     timestamp: Date.now() - 4 * 3600 * 1000, // 4 hours ago
     userRole: 'owner',
@@ -128,6 +144,7 @@ const MOCK_HISTORICAL_LOGS: AuditLog[] = [
     outcome: ActionOutcome.SUCCESS
   },
   {
+    organizationId: "demo-id",
     id: 'log_mock_5',
     timestamp: Date.now() - 1 * 24 * 3600 * 1000, // 1 day ago
     userRole: 'owner',
@@ -139,6 +156,7 @@ const MOCK_HISTORICAL_LOGS: AuditLog[] = [
     outcome: ActionOutcome.SUCCESS
   },
   {
+    organizationId: "demo-id",
     id: 'log_mock_6',
     timestamp: Date.now() - 1.5 * 24 * 3600 * 1000, // 1.5 days ago
     userRole: 'cashier',
@@ -150,6 +168,7 @@ const MOCK_HISTORICAL_LOGS: AuditLog[] = [
     outcome: ActionOutcome.SUCCESS
   },
   {
+    organizationId: "demo-id",
     id: 'log_mock_7',
     timestamp: Date.now() - 2 * 24 * 3600 * 1000, // 2 days ago
     userRole: 'manager',
@@ -161,6 +180,7 @@ const MOCK_HISTORICAL_LOGS: AuditLog[] = [
     outcome: ActionOutcome.SUCCESS
   },
   {
+    organizationId: "demo-id",
     id: 'log_mock_8',
     timestamp: Date.now() - 3 * 24 * 3600 * 1000, // 3 days ago
     userRole: 'manager',
@@ -172,6 +192,7 @@ const MOCK_HISTORICAL_LOGS: AuditLog[] = [
     outcome: ActionOutcome.SUCCESS
   },
   {
+    organizationId: "demo-id",
     id: 'log_mock_9',
     timestamp: Date.now() - 4 * 24 * 3600 * 1000, // 4 days ago
     userRole: 'manager',
@@ -183,6 +204,7 @@ const MOCK_HISTORICAL_LOGS: AuditLog[] = [
     outcome: ActionOutcome.SUCCESS
   },
   {
+    organizationId: "demo-id",
     id: 'log_mock_10',
     timestamp: Date.now() - 5 * 24 * 3600 * 1000, // 5 days ago
     userRole: 'manager',
@@ -194,6 +216,7 @@ const MOCK_HISTORICAL_LOGS: AuditLog[] = [
     outcome: ActionOutcome.FAILURE
   },
   {
+    organizationId: "demo-id",
     id: 'log_mock_11',
     timestamp: Date.now() - 7 * 24 * 3600 * 1000, // 7 days ago
     userRole: 'guest',
@@ -204,7 +227,8 @@ const MOCK_HISTORICAL_LOGS: AuditLog[] = [
     notes: 'Guest submitted mobile cart checkout order.',
     outcome: ActionOutcome.SUCCESS
   },
-  {
+    {
+    organizationId: "demo-id",
     id: 'log_mock_12',
     timestamp: Date.now() - 10 * 24 * 3600 * 1000, // 10 days ago
     userRole: 'manager',
@@ -216,6 +240,7 @@ const MOCK_HISTORICAL_LOGS: AuditLog[] = [
     outcome: ActionOutcome.SUCCESS
   },
   {
+    organizationId: "demo-id",
     id: 'log_mock_13',
     timestamp: Date.now() - 12 * 24 * 3600 * 1000, // 12 days ago
     userRole: 'owner',
@@ -234,15 +259,32 @@ const MOCK_HISTORICAL_LOGS: AuditLog[] = [
  * (organizationId, role) are propagated to the client immediately after 
  * administrative registration or bootstrap sequences.
  */
-export const refreshIdToken = async () => {
+export const refreshIdToken = async (): Promise<boolean> => {
   try {
-    const { auth } = await import('./lib/firebase');
-    if (auth?.currentUser) {
-      console.log('[IRSW Auth] Forcing ID token refresh to synchronize custom claims...');
-      await auth.currentUser.getIdToken(true);
-      return true;
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      console.warn('[IRSW Auth] No current user available for ID token refresh', {
+        action: 'refresh-id-token-skipped',
+      });
+      return false;
     }
-    return false;
+
+    console.log('[IRSW Auth] Forcing ID token refresh to synchronize custom claims', {
+      action: 'refresh-id-token-request',
+      uid: currentUser.uid,
+    });
+
+    const refreshedToken = await currentUser.getIdTokenResult(true);
+
+    console.log('[IRSW Auth] ID token refreshed', {
+      action: 'refresh-id-token-success',
+      uid: currentUser.uid,
+      claims: refreshedToken.claims,
+    });
+
+    return true;
+
   } catch (error) {
     console.error('[IRSW Auth] Failed to refresh ID token:', error);
     return false;
@@ -303,6 +345,7 @@ const App = () => {
 
   const logAction = useCallback((action: string, entityType: EntityType, entityId: string, outcome: ActionOutcome, notes?: string) => {
     const newLog: AuditLog = {
+      organizationId: user?.organizationId ?? "demo-id",
       id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       timestamp: Date.now(),
       userRole: user?.role || 'guest',
@@ -1221,15 +1264,26 @@ const App = () => {
      */
     const handleRegisterRestaurant = useCallback(async (restaurantName: string, ownerName: string, email: string, phone: string, password: string) => {
         setIsTerminating(true); // Show loading overlay for initialization
-        console.log('[Bootstrap START] Initializing new restaurant and owner profile', { restaurantName, email });
+        console.log('[Bootstrap START] Initializing new restaurant and owner profile', {
+            action: 'bootstrap-start',
+            restaurantName,
+            email,
+        });
 
-        try {
-            const { httpsCallable } = await import('firebase/functions');
-            const { functions } = await import('./lib/firebase');
-            
-            if (!functions) throw new Error("Firebase Functions not initialized");
+          try {
+            if (!functions) {
+                throw new Error("Firebase Functions not initialized");
+            }
 
-            const initializeNewRestaurant = httpsCallable(functions, 'initializeNewRestaurant');
+            const initializeNewRestaurant = httpsCallable(
+                functions,
+                'initializeNewRestaurant'
+            );
+            console.log('[Bootstrap CALLABLE] Invoking initializeNewRestaurant', {
+                action: 'callable-initialize-new-restaurant',
+                email,
+                restaurantName,
+            });
             const result = await initializeNewRestaurant({
                 restaurantName,
                 ownerName,
@@ -1245,9 +1299,10 @@ const App = () => {
                 throw new Error(data.message || 'Bootstrap initialization failed.');
             }
 
-            console.log('[Bootstrap SUCCESS] Restaurant and Owner provisioned', { 
-                orgId: data.organizationId, 
-                userId: data.userId 
+            console.log('[Bootstrap SUCCESS] Restaurant and Owner provisioned', {
+                action: 'bootstrap-success',
+                orgId: data.organizationId,
+                userId: data.userId,
             });
             
             // Log first audit entry for the new organization
@@ -1255,7 +1310,13 @@ const App = () => {
             
             // Refreshing the window or forcing a session check is recommended here 
             // so AuthContext picks up the new Custom Claims (Stage 5)
-            await refreshIdToken(); 
+            await refreshIdToken();
+            console.log('[Bootstrap HYDRATION] Refreshing auth context after provisioning', {
+                action: 'bootstrap-auth-refresh',
+                orgId: data.organizationId,
+                userId: data.userId,
+            });
+            await retryInit();
             setIsTerminating(false); 
             
         } catch (err: any) {
@@ -1513,7 +1574,7 @@ const App = () => {
                     onToggleAvailability={handleToggleAvailability}
                     onToggleGuestVisibility={handleToggleGuestVisibility}
                     onUpdateStaffStatus={handleUpdateStaffStatus}
-                    onRegisterStaff={async (name, email, role, password) => {
+                    onRegisterStaff={async (name, email, role, password, phone) => {
                         if (!user?.organizationId) {
                             const errorMsg = 'Registration failed: Your current session is not associated with an organization.';
                             console.error('[onRegisterStaff ERROR] Precondition failed:', { user });
@@ -1531,20 +1592,43 @@ const App = () => {
                             throw new Error(errorMsg);
                         }
 
-                        console.log('[onRegisterStaff START] Initiating staff registration flow', { name, email, role, organizationId: user.organizationId });
+                        console.log('[onRegisterStaff START] Initiating staff registration flow', {
+                            action: 'staff-registration-start',
+                            name,
+                            email,
+                            role,
+                            organizationId: user.organizationId,
+                        });
 
-                        try {
-                            const { httpsCallable } = await import('firebase/functions');
-                            const { functions } = await import('./lib/firebase');
-                            
-                            if (!functions) throw new Error("Firebase Functions not initialized");
-                            
-                            const createStaffUser = httpsCallable(functions, 'createStaffUser');
+                          try {
+                              if (!functions) {
+                                  throw new Error("Firebase Functions not initialized");
+                              }
+
+                              const createStaffUser = httpsCallable(
+                                  functions,
+                                  'createStaffUser'
+                              );
+                            console.log('[onRegisterStaff CALLABLE] Invoking createStaffUser', {
+                                action: 'callable-create-staff-user',
+                                organizationId: user.organizationId,
+                                email,
+                                role,
+                            });
+                           console.log('[onRegisterStaff PAYLOAD DEBUG]', {
+                              name,
+                              email,
+                              role,
+                              passwordProvided: !!password,
+                              phone,
+                              organizationId: user.organizationId
+                          });
                             const result = await createStaffUser({
                                 name,
                                 email,
                                 role,
                                 password,
+                                phone,
                                 organizationId: user.organizationId
                             });
 
@@ -1555,8 +1639,20 @@ const App = () => {
                             (error as any).code = data.code || 'functions/internal';
                             throw error;
                             }
-                        console.log("STEP 9 After atomic writes - Cloud Function Success. Claims set.");
+                        console.log('[onRegisterStaff SUCCESS] Cloud Function completed provisioning and claims assignment', {
+                            action: 'staff-registration-success',
+                            organizationId: user.organizationId,
+                            email,
+                            role,
+                        });
                         await refreshIdToken();
+                        console.log('[onRegisterStaff HYDRATION] Refreshing auth context after provisioning', {
+                            action: 'staff-registration-auth-refresh',
+                            organizationId: user.organizationId,
+                            email,
+                            role,
+                        });
+                        await retryInit();
                         } catch (callError: any) {
                         // Improve diagnostics: Expose underlying Firebase/Firestore error codes
                         const errorCode = callError.code || callError.details?.code || 'unknown';

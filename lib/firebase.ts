@@ -32,38 +32,42 @@ try {
   app = getApps().length ? getApp() : initializeApp(firebaseConfig);
   auth = getAuth(app);
   
-  const dbId = (!firebaseConfig.firestoreDatabaseId || firebaseConfig.firestoreDatabaseId === 'default') 
-    ? '(default)' 
-    : firebaseConfig.firestoreDatabaseId;
-
+ 
   try {
     db = initializeFirestore(app, {
-      experimentalForceLongPolling: true,
-    }, dbId);
+  experimentalForceLongPolling: true,
+});
   } catch (e: any) {
     console.warn("initializeFirestore with databaseId and long polling failed, fallback to default getFirestore:", e);
     try {
-      db = getFirestore(app, dbId);
+      db = getFirestore(app);
     } catch (err: any) {
       try {
-        db = initializeFirestore(app, {}, dbId);
+        db = initializeFirestore(app, {});
       } catch (subErr: any) {
         console.error("All Firestore initialization attempts failed:", subErr);
         db = getFirestore(app);
+        console.log("Firebase project:", app.options.projectId);
+        console.log("Using emulator:", USE_EMULATOR);
+        console.log("Hostname:", window.location.hostname);
       }
     }
   }
   
   storage = getStorage(app);
   functions = getFunctions(app);
+  console.log("========== Firebase Init ==========");
+  console.log("Project ID:", app.options.projectId);
+  console.log("Current Host:", window.location.hostname);
+  console.log("USE_EMULATOR:", USE_EMULATOR);
+  console.log("Database ID: (default)");
   googleProvider = new GoogleAuthProvider();
 
   if (USE_EMULATOR) {
-    console.log("Connecting to Firebase Emulators...");
-    connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-    connectFirestoreEmulator(db!, '127.0.0.1', 8080);
-    connectStorageEmulator(storage, '127.0.0.1', 9199);
-    connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+    connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
+    connectFirestoreEmulator(db!, 'localhost', 8080);
+    connectStorageEmulator(storage, 'localhost', 9199);
+    connectFunctionsEmulator(functions, 'localhost', 5001);
   }
   
   console.log("Firebase Auth Init:", auth);

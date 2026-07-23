@@ -1,10 +1,10 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { auth, db } from '../lib/firebase';
 import { onIdTokenChanged, User as FirebaseUser } from 'firebase/auth';
-import { writeBatch, doc } from 'firebase/firestore';
 import { firestore } from '../services/firestoreService';
 import { UserProfile, Role, UserStatus } from '../types';
 import { logoutUser } from '../utils/auth';
+import { resolveOrganizationIdForHydration, resolveRoleForHydration } from '../utils/authHydration';
 
 interface AuthError {
   type: 'auth' | 'profile' | 'organization' | 'role';
@@ -42,175 +42,129 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthError(null);
 
       // AUTHORITY: Parse custom claims from the ID token (ADR-001 Identity & RBAC)
-      const idTokenResult = await firebaseUser.getIdTokenResult();
-      const claims = idTokenResult.claims;
-      
-      console.log('Firebase UID:', firebaseUser.uid, 'Claims detected:', claims);
+const idTokenResult = await firebaseUser.getIdTokenResult();
+const claims = idTokenResult.claims;
 
-      let userDocData = await firestore.users.getById(firebaseUser.uid);
-      
-      console.log('UserDoc:', userDocData);
+console.log('[IRSW Auth] Starting profile hydration', {
+  action: 'auth-hydration-start',
+  uid: firebaseUser.uid,
+  claims,
+});
 
-      if (!userDocData && firebaseUser.email) {
-          const matchedUsers = await firestore.users.executeQuery({
-              where: [{ field: 'email', operator: '==', value: firebaseUser.email }]
-          });
-          if (matchedUsers.length > 0) {
-              userDocData = matchedUsers[0];
-          }
-      }
+console.log("[Hydration] Looking up user profile", {
+  uid: firebaseUser.uid,
+});
 
-      // Check for active memberships
+let userDocData = null;
+
+try {
+  userDocData = await firestore.users.getById(firebaseUser.uid);
+
+  console.log("[Hydration] Repository returned:", userDocData);
+} catch (err) {
+  console.error("[Hydration] Repository threw:", err);
+
+  setAuthError({
+    type: 'profile',
+    message: 'Unable to load user profile.',
+  });
+
+  setUser(null);
+  setLoading(false);
+  return;
+}
+
+if (!userDocData) {
+  setAuthError({
+    type: 'profile',
+    message: 'User profile not found. Please contact an administrator.',
+  });
+
+  setUser(null);
+  setLoading(false);
+  return;
+}
+
+console.log('[IRSW Auth] Profile document resolved', {
+  action: 'auth-hydration-profile-resolved',
+  uid: firebaseUser.uid,
+  profile: userDocData,
+});
+
       let activeMemberships: any[] = [];
       try {
         activeMemberships = await firestore.memberships.executeQuery({
           where: [
             { field: 'userId', operator: '==', value: firebaseUser.uid },
-            { field: 'status', operator: '==', value: 'active' }
+            { field: 'status', operator: '==', value: 'ACTIVE' }
           ]
         });
       } catch (err) {
-        console.warn('Membership query failed initially, will retry if auto-bootstrapped', err);
+        console.warn('Membership query failed during hydration', err);
       }
 
-      // Seamless Auto-Bootstrap Block to ensure local and live dev registration work nicely without missing users collection blockages
-      if (!userDocData && db) {
-        console.info('[Auth Context] No user document found. Performing sandbox/dev auto-onboarding...');
-        try {
-          const orgId = 'org_main';
-          const uId = firebaseUser.uid;
-          const uEmail = firebaseUser.email || '';
-          const rawName = uEmail.split('@')[0] || 'Crew Member';
-          const formattedName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+      console.log('[IRSW Auth] Membership resolution complete', {
+        action: 'auth-hydration-memberships-resolved',
+        uid: firebaseUser.uid,
+        membershipCount: activeMemberships.length,
+      });
 
-          const bootstrappedUser = {
-            id: uId,
-            email: uEmail,
-            displayName: formattedName,
-            name: formattedName,
-            phone: '',
-            role: 'owner' as Role,
-            globalRole: 'USER' as const,
-            status: UserStatus.ACTIVE,
-            defaultOrganizationId: orgId,
-            organizationId: orgId,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          };
-
-          const bootstrappedOrg = {
-            name: 'Lumina Dining',
-            status: 'active',
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          };
-
-          const bootstrappedStaff = {
-            uid: uId,
-            firstName: formattedName.split(' ')[0],
-            lastName: formattedName.split(' ').slice(1).join(' ') || 'Owner',
-            displayName: formattedName,
-            email: uEmail,
-            phone: '',
-            staffCode: `STF-${uId.slice(0, 5).toUpperCase()}`,
-            role: 'owner' as Role,
-            status: 'ACTIVE',
-            organizationId: orgId,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          };
-
-          const bootstrappedMembership = {
-            userId: uId,
-            organizationId: orgId,
-            role: 'owner' as Role,
-            status: 'active',
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          };
-
-          const batch = writeBatch(db);
-          batch.set(doc(db, 'users', uId), bootstrappedUser, { merge: true });
-          batch.set(doc(db, 'organizations', orgId), bootstrappedOrg, { merge: true });
-          batch.set(doc(db, 'organizations', orgId, 'staff', uId), bootstrappedStaff, { merge: true });
-          batch.set(doc(db, 'memberships', `${orgId}_${uId}`), bootstrappedMembership, { merge: true });
-
-          await batch.commit();
-          console.info('[Auth Context] Auto-bootstrapping completed.');
-          userDocData = bootstrappedUser;
-        } catch (bootstrapErr) {
-          console.error('[Auth Context] Auto-bootstrapping failed:', bootstrapErr);
-        }
-      }
-      
-      console.log('UserDoc (after membership query):', userDocData);
-
-      let role: Role | null = (claims.role as string)?.toLowerCase() as Role || null;
+      let role: Role | null = resolveRoleForHydration(
+        claims.role,
+        (userDocData as any)?.role,
+        activeMemberships.map((membership: any) => membership.role)
+      ) as Role | null;
       let displayName = firebaseUser.email?.split('@')[0] || 'User';
-      let organizationId: string | null = (claims.organizationId as string) || null;
-      let defaultOrganizationId = null;
+      let organizationId: string | null = resolveOrganizationIdForHydration(
+        claims.organizationId as string | undefined,
+        userDocData as any,
+        activeMemberships
+      );
       let name = displayName;
       let phone = '';
       let photoFileName = '';
       let status = UserStatus.ACTIVE;
 
-      if (!userDocData) {
-        setAuthError({ type: 'profile', message: 'User profile not found. Please contact an administrator.' });
-        setLoading(false);
-        return;
-      }
-
       const data = userDocData as any;
       const actualUserId = data.id || firebaseUser.uid;
-      
-      // Hydrate missing authorization identifiers from Firestore if claims aren't set yet
-      role = role || (data.role as string)?.toLowerCase() as Role || null;
-      organizationId = organizationId || data.organizationId || null;
+
+      role = resolveRoleForHydration(
+        claims.role,
+        data.role,
+        activeMemberships.map((membership: any) => membership.role)
+      ) as Role | null;
 
       name = data.name || name;
       displayName = data.displayName || name;
-      defaultOrganizationId = data.defaultOrganizationId || null;
       phone = data.phone || phone;
       photoFileName = data.photoFileName || photoFileName;
       status = data.status || status;
 
-      // 2. Load Organization Memberships & Explicit Resolution
-      // Skip resolution if organization is already established via claims
-      const memberships = organizationId ? [] : await firestore.memberships.executeQuery({
-        where: [
-          { field: 'userId', operator: '==', value: actualUserId },
-          { field: 'status', operator: '==', value: 'active' }
-        ]
-      });
-
-      if (memberships.length === 0 && !organizationId) {
-        setAuthError({ type: 'organization', message: 'No active organization memberships found. Access denied.' });
-        setLoading(false);
-        return;
-      }
-
       if (!organizationId) {
-        let activeMembership = null;
-
-        // Try defaultOrganizationId first
-        if (defaultOrganizationId) {
-          activeMembership = memberships.find((d: any) => d.organizationId === defaultOrganizationId);
+        if (activeMemberships.length === 0) {
+          setAuthError({ type: 'organization', message: 'No active organization memberships found. Access denied.' });
+          setUser(null);
+          setLoading(false);
+          return;
         }
 
-        // If not found or not valid, check if only one membership exists
-        if (!activeMembership) {
-          if (memberships.length === 1) {
-            activeMembership = memberships[0];
-          } else {
-            setAuthError({ type: 'organization', message: 'Multiple organizations found. Organization switcher not yet implemented.' });
-            setLoading(false);
-            return;
-          }
+        const uniqueOrganizations = [...new Set(activeMemberships.map((membership: any) => membership.organizationId).filter(Boolean))];
+        if (uniqueOrganizations.length > 1) {
+          setAuthError({ type: 'organization', message: 'Multiple organizations found. Organization switcher not yet implemented.' });
+          setUser(null);
+          setLoading(false);
+          return;
         }
-        organizationId = (activeMembership as any).organizationId;
+
+        organizationId = uniqueOrganizations[0] || null;
       }
       
-      console.log('OrganizationId:', organizationId);
+      console.log('[IRSW Auth] Organization resolved for hydration', {
+        action: 'auth-hydration-organization-resolved',
+        uid: firebaseUser.uid,
+        organizationId,
+        role,
+      });
       
       // Look up tenant staff record to get the authoritative role and status
       try {
@@ -218,7 +172,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (staffDocSnap) {
            console.log('StaffDoc:', staffDocSnap);
            const staffData = staffDocSnap as any;
-           role = role || (staffData.role as string)?.toLowerCase() as Role || null;
+           role = resolveRoleForHydration(
+             claims.role,
+             data.role,
+             activeMemberships.map((membership: any) => membership.role),
+             staffData.role
+           ) as Role | null;
            status = staffData.status || status;
            name = staffData.displayName || staffData.firstName || name;
         }
@@ -246,10 +205,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionId: `SEC-${Date.now()}`
       };
 
+      console.log('[IRSW Auth] Session hydrated', {
+        action: 'auth-hydration-complete',
+        uid: firebaseUser.uid,
+        organizationId,
+        role: role as Role,
+      });
       setUser(sessionUser);
     } catch (error: any) {
       console.error("Error loading user profile:", error);
-      setAuthError({ type: 'profile', message: 'Internal system error during profile hydration. Please try again.' });
+      const message = error?.code?.startsWith('auth/')
+        ? 'Authentication failed. Please try again.'
+        : 'Authorization failed. Please contact an administrator.';
+      setAuthError({ type: error?.code?.startsWith('auth/') ? 'auth' : 'profile', message });
       setUser(null);
     } finally {
       setLoading(false);
@@ -279,7 +247,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             status: UserStatus.ACTIVE,
             guestAvatar: 'fa-cat',
             guestColor: 'bg-indigo-500',
-            organizationId: 'org_main',
+            organizationId: null,
             sessionId: `GST-QR-${Date.now()}`
           } as UserProfile);
         } else {

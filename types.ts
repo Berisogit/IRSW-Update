@@ -15,6 +15,7 @@
 // 9. viewer: Read-only access to menus and floor plans
 // 9. guest: Customer access (Mobile ordering)
 //
+
 export type Role =
   | 'system_admin'
   | 'super_admin'
@@ -25,8 +26,7 @@ export type Role =
   | 'waiter'
   | 'kitchen'
   | 'viewer'
-  | 'guest'
-  | (string & {}); 
+  | 'guest';
 
 export const STAFF_ROLES: readonly Role[] = [
   'system_admin',
@@ -282,3 +282,4 @@ export interface Task {
   dueDate?: number;
   createdByCode: string;
 }
+

@@ -5,7 +5,7 @@
 1. **Global Safety Net**: Default deny for all reads and writes.
 2. **Tenant Isolation**: Operations are restricted to the `organizationId` matching the user's role in the `organizationUsers` collection.
 3. **Role Validation (Admin)**: `system_admin` users (as validated by global user doc `globalRole`) have complete access to all organizations.
-4. **Role Validation (Organization Level)**: Organization-level roles (`OWNER`, `MANAGER`, `CASHIER`, `WAITER`, `KITCHEN`) are verified via the `/organizations/{orgId}/organizationUsers/{userId}` subcollection equivalent structure or root `organizationUsers` where `organizationId` matches.
+4. **Role Validation (Organization Level)**: Organization-level roles (`owner`, `manager`, `cashier`, `waiter`, `kitchen`) are verified via the `/organizations/{orgId}/organizationUsers/{userId}` subcollection equivalent structure or root `organizationUsers` where `organizationId` matches.
 5. **No Spoofing**: Document ID matching the Auth ID is enforced for `users/{userId}`.
 6. **No Phantom Writes**: Relational integrity checked. Creating an entity belonging to an org requires the org to exist.
 7. **Role-Based Access Control (RBAC)**:
@@ -24,7 +24,7 @@
 2. **State Shortcutting**: Updating an order status directly from `DRAFT` to `CLOSED` without payment.
 3. **Tenant Bleeding**: A user from `Org A` tries to read or write to `Org B`.
 4. **Resource Poisoning**: Pushing a 2MB string into a `description` field.
-5. **Privilege Escalation**: Attempting to update own `role` to `OWNER` in `organizationUsers`.
+5. **Privilege Escalation**: Attempting to update own `role` to `owner` in `organizationUsers`.
 6. **Orphaned Write**: Creating an order for a non-existent `tableId`.
 7. **PII Extraction**: Non-manager fetching the `contactEmail` of the organization.
 8. **Value Poisoning**: Putting an array of strings in a `price: number` field.
