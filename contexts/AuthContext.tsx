@@ -1,13 +1,17 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { auth, db } from '../lib/firebase';
-import { onIdTokenChanged, User as FirebaseUser } from 'firebase/auth';
+import {
+  onIdTokenChanged,
+  User as FirebaseUser,
+  signOut,
+} from 'firebase/auth';
 import { firestore } from '../services/firestoreService';
 import { UserProfile, Role, UserStatus } from '../types';
 import { logoutUser } from '../utils/auth';
 import { resolveOrganizationIdForHydration, resolveRoleForHydration } from '../utils/authHydration';
 
 interface AuthError {
-  type: 'auth' | 'profile' | 'organization' | 'role';
+  type: 'auth' | 'profile' | 'organization' | 'role' | 'permission';
   message: string;
 }
 
@@ -84,8 +88,29 @@ if (!userDocData) {
   setLoading(false);
   return;
 }
+if (
+  userDocData.status === UserStatus.SUSPENDED ||
+  userDocData.status === UserStatus.INACTIVE
+) {
+  console.warn('[IRSW Auth] Suspended user attempted login', {
+    uid: firebaseUser.uid,
+    status: userDocData.status,
+  });
 
-console.log('[IRSW Auth] Profile document resolved', {
+  await signOut(auth);
+
+  setAuthError({
+    type: 'permission',
+    message:
+      'Your account has been suspended or deactivated. Please contact your administrator.',
+  });
+
+  setUser(null);
+  setLoading(false);
+
+  return;
+}
+console.warn('[IRSW Auth] Inactive or suspended user attempted login', {
   action: 'auth-hydration-profile-resolved',
   uid: firebaseUser.uid,
   profile: userDocData,
