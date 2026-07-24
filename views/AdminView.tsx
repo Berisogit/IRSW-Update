@@ -40,9 +40,10 @@ interface AdminViewProps {
     onDeleteTask?: (id: string) => void;
     onUpdateTable?: (table: Table) => void;
     onAddMenuItems?: (items: Partial<MenuItem>[]) => void;
-    onUpdateStaffStatus?: (phone: string, status: UserStatus) => void;
+    onUpdateStaffStatus?: (staffCode: string, status: UserStatus) => void;
     onRegisterStaff?: (name: string, email: string, role: Role, password: string, phone: string) => Promise<void>;
     currentUserRole?: Role;
+    currentUser?: UserProfile | null;
     onCreateIngredient?: (ing: Partial<Ingredient>) => void;
     onUpdateIngredient?: (id: string, updates: Partial<Ingredient>) => void;
     onDeleteIngredient?: (id: string) => void;
@@ -459,6 +460,7 @@ const AdminView: React.FC<AdminViewProps> = ({
     onRegisterStaff,
     onAddMenuItems,
     currentUserRole,
+    currentUser,
     onCreateIngredient,
     onUpdateIngredient,
     onDeleteIngredient,
@@ -1609,14 +1611,29 @@ const AdminView: React.FC<AdminViewProps> = ({
                                     {staff.status === UserStatus.ACTIVE && (
                                         <div className="mt-auto">
                                             <button 
-                                                onClick={() => onUpdateStaffStatus?.(staff.staffCode!, UserStatus.SUSPENDED)}
+                                                onClick={() => {
+                                                    if (
+                                                        currentUser?.uid &&
+                                                        staff.uid &&
+                                                        staff.uid === currentUser.uid
+                                                    ) {
+                                                        console.warn('[IRSW RBAC] Prevented self-suspension attempt');
+                                                        return;
+                                                    }
+
+                                                    onUpdateStaffStatus?.(
+                                                        staff.staffCode!,
+                                                        UserStatus.SUSPENDED
+                                                    );
+                                                }}
                                                 className="w-full h-14 rounded-2xl border-2 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-black uppercase text-[10px] tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95"
                                             >
                                                 Deactivate
                                             </button>
                                         </div>
                                     )}
-                                    {staff.status === UserStatus.SUSPENDED && (
+                                    {staff.status === UserStatus.ACTIVE &&
+                                    staff.uid !== currentUser?.uid && (
                                         <div className="mt-auto">
                                             <button 
                                                 onClick={() => onUpdateStaffStatus?.(staff.staffCode!, UserStatus.ACTIVE)}
