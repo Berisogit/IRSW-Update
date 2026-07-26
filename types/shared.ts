@@ -15,18 +15,13 @@ export const UserRole = {
   GUEST: 'guest',
 } as const;
 
-export const INVENTORY_ADMIN_ROLES = [
+export const INVENTORY_ADMIN_ROLES: readonly Role[] = [
   UserRole.SYSTEM_ADMIN,
   UserRole.SUPER_ADMIN,
   UserRole.OWNER,
   UserRole.MANAGER,
 ];
 
-export enum UserStatus {
-  ACTIVE = 'ACTIVE',
-  INACTIVE = 'INACTIVE',
-  DELETED = 'DELETED',
-}
 
 export enum AuditOutcome {
   SUCCESS = 'SUCCESS',

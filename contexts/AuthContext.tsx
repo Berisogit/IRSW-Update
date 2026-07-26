@@ -88,112 +88,123 @@ if (!userDocData) {
   setLoading(false);
   return;
 }
-if (
-  userDocData.status === UserStatus.SUSPENDED ||
-  userDocData.status === UserStatus.INACTIVE
-) {
-  console.warn('[IRSW Auth] Suspended user attempted login', {
-    uid: firebaseUser.uid,
-    status: userDocData.status,
-  });
 
-  await signOut(auth);
-
-  setAuthError({
-    type: 'permission',
-    message:
-      'Your account has been suspended or deactivated. Please contact your administrator.',
-  });
-
-  setUser(null);
-  setLoading(false);
-
-  return;
-}
-console.warn('[IRSW Auth] Inactive or suspended user attempted login', {
+console.log('[IRSW Auth] Profile resolved', {
   action: 'auth-hydration-profile-resolved',
   uid: firebaseUser.uid,
   profile: userDocData,
 });
 
-      let activeMemberships: any[] = [];
-      try {
-        activeMemberships = await firestore.memberships.executeQuery({
-          where: [
-            { field: 'userId', operator: '==', value: firebaseUser.uid },
-            { field: 'status', operator: '==', value: 'ACTIVE' }
-          ]
-        });
-      } catch (err) {
-        console.warn('Membership query failed during hydration', err);
-      }
+// Continue with membership lookup...
+let activeMemberships: any[] = [];
 
-      console.log('[IRSW Auth] Membership resolution complete', {
-        action: 'auth-hydration-memberships-resolved',
-        uid: firebaseUser.uid,
-        membershipCount: activeMemberships.length,
-      });
+try {
+  activeMemberships = await firestore.memberships.executeQuery({
+    where: [
+      {
+        field: 'userId',
+        operator: '==',
+        value: firebaseUser.uid,
+      },
+      {
+        field: 'status',
+        operator: '==',
+        value: 'ACTIVE',
+      },
+    ],
+  });
+} catch (err) {
+  console.warn(
+    '[IRSW Auth] Membership query failed during hydration',
+    err
+  );
+}
 
-      let role: Role | null = resolveRoleForHydration(
-        claims.role,
-        (userDocData as any)?.role,
-        activeMemberships.map((membership: any) => membership.role)
-      ) as Role | null;
-      let displayName = firebaseUser.email?.split('@')[0] || 'User';
-      let organizationId: string | null = resolveOrganizationIdForHydration(
-        claims.organizationId as string | undefined,
-        userDocData as any,
-        activeMemberships
-      );
-      let name = displayName;
-      let phone = '';
-      let photoFileName = '';
-      let status = UserStatus.ACTIVE;
+console.log('[IRSW Auth] Membership resolution complete', {
+  action: 'auth-hydration-memberships-resolved',
+  uid: firebaseUser.uid,
+  membershipCount: activeMemberships.length,
+});
 
-      const data = userDocData as any;
-      const actualUserId = data.id || firebaseUser.uid;
+const data = userDocData as any;
 
-      role = resolveRoleForHydration(
-        claims.role,
-        data.role,
-        activeMemberships.map((membership: any) => membership.role)
-      ) as Role | null;
+let role: Role | null = resolveRoleForHydration(
+  claims.role,
+  data.role,
+  activeMemberships.map((membership: any) => membership.role)
+) as Role | null;
 
-      name = data.name || name;
-      displayName = data.displayName || name;
-      phone = data.phone || phone;
-      photoFileName = data.photoFileName || photoFileName;
-      status = data.status || status;
+let displayName =
+  firebaseUser.displayName ||
+  firebaseUser.email?.split('@')[0] ||
+  'User';
 
-      if (!organizationId) {
-        if (activeMemberships.length === 0) {
-          setAuthError({ type: 'organization', message: 'No active organization memberships found. Access denied.' });
-          setUser(null);
-          setLoading(false);
-          return;
-        }
+let organizationId: string | null =
+  resolveOrganizationIdForHydration(
+    claims.organizationId as string | undefined,
+    data,
+    activeMemberships
+  );
 
-        const uniqueOrganizations = [...new Set(activeMemberships.map((membership: any) => membership.organizationId).filter(Boolean))];
-        if (uniqueOrganizations.length > 1) {
-          setAuthError({ type: 'organization', message: 'Multiple organizations found. Organization switcher not yet implemented.' });
-          setUser(null);
-          setLoading(false);
-          return;
-        }
+let name = data.name || displayName;
+displayName = data.displayName || name;
+let phone = data.phone || '';
+let photoFileName = data.photoFileName || '';
+let status = data.status || UserStatus.ACTIVE;
 
-        organizationId = uniqueOrganizations[0] || null;
-      }
-      
-      console.log('[IRSW Auth] Organization resolved for hydration', {
-        action: 'auth-hydration-organization-resolved',
-        uid: firebaseUser.uid,
-        organizationId,
-        role,
-      });
-      
+// =====================================================
+// PLATFORM ADMINISTRATORS
+// System Admin / Super Admin do not require organization
+// membership.
+// =====================================================
+
+const isPlatformAdmin =
+  role === 'system_admin' ||
+  role === 'super_admin';
+
+if (!isPlatformAdmin && !organizationId) {
+  if (activeMemberships.length === 0) {
+    setAuthError({
+      type: 'organization',
+      message:
+        'No active organization memberships found. Access denied.',
+    });
+    setUser(null);
+    setLoading(false);
+    return;
+  }
+
+  const uniqueOrganizations = [
+    ...new Set(
+      activeMemberships
+        .map((membership: any) => membership.organizationId)
+        .filter(Boolean)
+    ),
+  ];
+
+  if (uniqueOrganizations.length > 1) {
+    setAuthError({
+      type: 'organization',
+      message:
+        'Multiple organizations found. Organization switcher not yet implemented.',
+    });
+    setUser(null);
+    setLoading(false);
+    return;
+  }
+
+  organizationId = uniqueOrganizations[0] || null;
+}
+
+console.log('[IRSW Auth] Organization resolved for hydration', {
+  action: 'auth-hydration-organization-resolved',
+  uid: firebaseUser.uid,
+  organizationId,
+  role,
+});     
       // Look up tenant staff record to get the authoritative role and status
       try {
-        const staffDocSnap = await firestore.staff.getById(organizationId as string, actualUserId);
+        const staffDocSnap = await firestore.staff.getById(organizationId as string, firebaseUser.uid);
         if (staffDocSnap) {
            console.log('StaffDoc:', staffDocSnap);
            const staffData = staffDocSnap as any;
@@ -206,15 +217,40 @@ console.warn('[IRSW Auth] Inactive or suspended user attempted login', {
            status = staffData.status || status;
            name = staffData.displayName || staffData.firstName || name;
         }
-      } catch (e) {
-        console.warn('Failed to fetch tenant staff document', e);
-      }
+               if (
+                    status === UserStatus.SUSPENDED ||
+                    status === UserStatus.INACTIVE
+                ) {
+                    console.warn('[IRSW Auth] Staff account blocked', {
+                        uid: firebaseUser.uid,
+                        organizationId,
+                        status,
+                    });
 
-      if (!role) {
-        setAuthError({ type: 'role', message: 'No active roles assigned. Application access denied. Please contact an administrator.' });
-        setLoading(false);
-        return;
-      }
+                    await signOut(auth);
+
+                    setAuthError({
+                        type: 'permission',
+                        message:
+                            'Your account has been suspended or deactivated. Please contact your administrator.',
+                    });
+
+                    setUser(null);
+                    setLoading(false);
+                    return;
+                }
+                } catch (e) {
+            console.error('[IRSW Auth] Failed to fetch staff document', e);
+
+            setAuthError({
+              type: 'profile',
+              message: 'Unable to verify your staff profile. Please try again.',
+            });
+
+            setUser(null);
+            setLoading(false);
+            return;
+          }
 
       // 3 & 4. Hydrate session object
       const sessionUser: UserProfile = {

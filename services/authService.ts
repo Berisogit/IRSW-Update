@@ -106,31 +106,54 @@ export const signInWithGoogle = async (): Promise<AuthResponse> => {
   }
 };
 
-
-export const updateStaffStatus = async (staffId: string, status: UserStatus) => {
+export const updateStaffStatus = async (
+  organizationId: string,
+  staffId: string,
+  status: UserStatus,
+  updatedBy: string = 'system'
+): Promise<boolean> => {
   try {
-    await firestore.legacyStaff.update(staffId, { status }, 'system');
+    await firestore.staff.update(
+      organizationId,
+      staffId,
+      { status: status as any },
+      updatedBy
+    );
+
     return true;
   } catch (error) {
-    console.error("Error updating staff status:", error);
+    console.error('Error updating staff status:', error);
     return false;
   }
 };
 
-export const getAllStaff = async (): Promise<UserProfile[]> => {
+export const getAllStaff = async (
+  organizationId: string
+): Promise<UserProfile[]> => {
   try {
-    const docs = await firestore.legacyStaff.find();
-    return docs.map((data: any) => {
-      return {
-        name: data.name,
-        phone: data.phone,
-        role: data.role,
-        status: data.status,
-        staffCode: data.id,
-      };
-    });
+    const docs = await firestore.staff.executeQuery(
+      organizationId,
+      {}
+    );
+
+    return docs.map((data: any) => ({
+      uid: data.uid || data.id,
+      displayName: data.displayName ?? data.name ?? '',
+      name: data.name ?? data.displayName ?? '',
+      email: data.email ?? '',
+      phone: data.phone ?? '',
+      role: data.role,
+      status: data.status,
+      organizationId,
+      staffCode: data.uid || data.id,
+    } as UserProfile));
+
   } catch (error) {
-    console.error("Error fetching staff:", error);
+    console.error(
+      "Error fetching organization staff:",
+      error
+    );
+
     return [];
   }
 };

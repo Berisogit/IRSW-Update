@@ -43,10 +43,10 @@ import { LoginScreen } from './components/LoginScreen';
 
 import { logoutUser } from './utils/auth';
 
-import { 
-  signOutStaff, 
-  getAllStaff, 
-  updateStaffStatus 
+import {
+  signOutStaff,
+  getAllStaff,
+  updateStaffStatus
 } from './services/authService';
 
 import { db } from './services/databaseService';
@@ -368,8 +368,28 @@ const App = () => {
     try { return (localStorage.getItem(PREFS_THEME_KEY) as 'light' | 'dark') || 'light'; }
     catch { return 'light'; }
   });
+useEffect(() => {
+  if (!user?.organizationId) {
+    setStaffList([]);
+    setStaffLoading(false);
+    setStaffError(null);
+    return;
+  }
 
-  const [initTimeout, setInitTimeout] = useState(false);
+  setStaffLoading(true);
+  setStaffError(null);
+
+  getAllStaff(user.organizationId)
+    .then(setStaffList)
+    .catch(err => {
+      console.error('Failed to load staff directory:', err);
+      setStaffError('Unable to load staff directory.');
+    })
+    .finally(() => {
+      setStaffLoading(false);
+    });
+
+}, [user?.organizationId]);  const [initTimeout, setInitTimeout] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -1002,7 +1022,7 @@ const App = () => {
           }
         }
       }
-      logAction('SESSION_ESTABLISHED', 'User', user.staffCode || user.sessionId || 'N/A', ActionOutcome.SUCCESS);
+      logAction('SESSION_ESTABLISHED', 'User', user.uid || user.sessionId || 'N/A', ActionOutcome.SUCCESS);
     }
   }, [user]);
 
@@ -1244,15 +1264,29 @@ const App = () => {
       }
   }, [menu, user]);
 
-  const handleUpdateStaffStatus = useCallback(async (staffId: string, status: UserStatus) => {
-    if (!user?.organizationId) return;
-    try {
-      await firestore.staff.update(user.organizationId, staffId, { status: status as any }, user.uid || 'SYSTEM');
-      logAction('STAFF_STATUS_UPDATED', 'User', staffId, ActionOutcome.SUCCESS, `Account status shifted to ${status}.`);
-    } catch (err) {
-      console.error('Failed to update staff status:', err);
-    }
-  }, [user, logAction]);
+  const handleUpdateStaffStatus = useCallback(
+    async (staffId: string, status: UserStatus) => {
+      if (!user?.organizationId) return;
+
+  const success = await updateStaffStatus(
+        user.organizationId,
+        staffId,
+        status,
+        user.uid || 'SYSTEM'
+      );
+
+      if (success) {
+        logAction(
+          'STAFF_STATUS_UPDATED',
+          'User',
+          staffId,
+          ActionOutcome.SUCCESS,
+          `Account status shifted to ${status}.`
+        );
+      }
+    },
+    [user, logAction]
+  );
 
   const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
 
@@ -1564,7 +1598,7 @@ const App = () => {
                     onCreateIngredient={handleCreateIngredient}
                     onUpdateIngredient={handleUpdateIngredient}
                     onDeleteIngredient={handleDeleteIngredient}
-                    onAddTask={(t) => setTasks(prev => [...prev, { ...t, id: `task_${Date.now()}`, createdAt: Date.now(), updatedAt: Date.now(), createdByCode: user.staffCode || 'SYSTEM' }])}
+                    onAddTask={(t) => setTasks(prev => [...prev, { ...t, id: `task_${Date.now()}`, createdAt: Date.now(), updatedAt: Date.now(), createdByCode: user.uid || 'SYSTEM' }])}
                     onUpdateTask={(t) => setTasks(prev => prev.map(task => task.id === t.id ? { ...t, updatedAt: Date.now() } : task))}
                     onDeleteTask={(id) => setTasks(prev => prev.filter(t => t.id !== id))}
                     onUpdateRole={handleUpdateRole}

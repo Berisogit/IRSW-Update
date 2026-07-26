@@ -81,6 +81,7 @@ export enum UserStatus {
   REJECTED = 'REJECTED',
   SUSPENDED = 'SUSPENDED',
   INACTIVE = 'INACTIVE',
+  DELETED = 'DELETED',
 }
 
 import { OrderStatus, PaymentStatus } from './types/firestoreSchema';

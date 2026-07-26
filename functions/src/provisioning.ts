@@ -31,14 +31,16 @@ export const applyOrganizationMemberProvisioningToBatch = (
 
   const membershipId = `${organizationId}_${uid}`;
 
-  const staffData = {
+  const staffCode = `STF-${Math.floor(100000 + Math.random() * 900000)}`;
+
+const staffData = {
     uid,
     firstName: name.split(' ')[0],
     lastName: name.split(' ').slice(1).join(' '),
     displayName: name,
     email,
     phone,
-    staffCode: uid,
+    staffCode,
     role,
     assignedRoles: [role],
     status,
@@ -46,7 +48,7 @@ export const applyOrganizationMemberProvisioningToBatch = (
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
     createdBy,
-  };
+};
 
   const userData = {
     email,

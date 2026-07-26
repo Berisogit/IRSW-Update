@@ -40,7 +40,7 @@ interface AdminViewProps {
     onDeleteTask?: (id: string) => void;
     onUpdateTable?: (table: Table) => void;
     onAddMenuItems?: (items: Partial<MenuItem>[]) => void;
-    onUpdateStaffStatus?: (staffCode: string, status: UserStatus) => void;
+    onUpdateStaffStatus?: (staffId: string, status: UserStatus) => void;
     onRegisterStaff?: (name: string, email: string, role: Role, password: string, phone: string) => Promise<void>;
     currentUserRole?: Role;
     currentUser?: UserProfile | null;
@@ -1570,7 +1570,7 @@ const AdminView: React.FC<AdminViewProps> = ({
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
                             {staffDirectory.map(staff => (
-                                <div key={staff.uid || staff.staffCode || staff.email || staff.phone} className="bg-white dark:bg-slate-900 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-premium flex flex-col group transition-all hover:-translate-y-1">
+                                <div key={staff.uid || staff.email || staff.phone} className="bg-white dark:bg-slate-900 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-premium flex flex-col group transition-all hover:-translate-y-1">
                                     <div className="flex items-center gap-6 mb-8">
                                         <div className="w-16 h-16 bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 rounded-3xl flex items-center justify-center text-2xl font-black shadow-sm border border-brand-100 dark:border-brand-800">
                                             {staff.name.charAt(0)}
@@ -1595,13 +1595,13 @@ const AdminView: React.FC<AdminViewProps> = ({
                                     {staff.status === UserStatus.PENDING_APPROVAL && (
                                         <div className="grid grid-cols-2 gap-4 mt-auto">
                                             <button 
-                                                onClick={() => onUpdateStaffStatus?.(staff.staffCode!, UserStatus.REJECTED)}
+                                                onClick={() => onUpdateStaffStatus?.(staff.uid!, UserStatus.REJECTED)}
                                                 className="h-14 rounded-2xl border-2 border-rose-100 dark:border-rose-900 text-rose-500 font-black uppercase text-[10px] tracking-widest hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all active:scale-95"
                                             >
                                                 Reject
                                             </button>
                                             <button 
-                                                onClick={() => onUpdateStaffStatus?.(staff.staffCode!, UserStatus.ACTIVE)}
+                                                onClick={() => onUpdateStaffStatus?.(staff.uid!, UserStatus.ACTIVE)}
                                                 className="h-14 rounded-2xl bg-brand-600 text-white font-black uppercase text-[10px] tracking-widest shadow-lg hover:bg-brand-700 transition-all active:scale-95"
                                             >
                                                 Authorize
@@ -1622,7 +1622,7 @@ const AdminView: React.FC<AdminViewProps> = ({
                                                     }
 
                                                     onUpdateStaffStatus?.(
-                                                        staff.staffCode!,
+                                                        staff.uid!,
                                                         UserStatus.SUSPENDED
                                                     );
                                                 }}
@@ -1632,17 +1632,21 @@ const AdminView: React.FC<AdminViewProps> = ({
                                             </button>
                                         </div>
                                     )}
-                                    {staff.status === UserStatus.ACTIVE &&
-                                    staff.uid !== currentUser?.uid && (
-                                        <div className="mt-auto">
-                                            <button 
-                                                onClick={() => onUpdateStaffStatus?.(staff.staffCode!, UserStatus.ACTIVE)}
-                                                className="w-full h-14 rounded-2xl border-2 border-emerald-200 dark:border-emerald-900/50 text-emerald-600 dark:text-emerald-500 font-black uppercase text-[10px] tracking-widest hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-all active:scale-95"
-                                            >
-                                                Reactivate
-                                            </button>
-                                        </div>
-                                    )}
+                                    {staff.status === UserStatus.SUSPENDED &&
+                                        staff.uid !== currentUser?.uid && (
+                                            <div className="mt-auto">
+                                                <button
+                                                    onClick={() =>
+                                                        onUpdateStaffStatus?.(
+                                                            staff.uid!,
+                                                            UserStatus.ACTIVE
+                                                        )
+                                                    }
+                                                >
+                                                    Reactivate
+                                                </button>
+                                            </div>
+                                        )}
                                 </div>
                             ))}
                         </div>
@@ -1660,7 +1664,7 @@ const AdminView: React.FC<AdminViewProps> = ({
                          ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
                                 {pendingStaff.map(staff => (
-                                    <div key={staff.uid || staff.staffCode || staff.email || staff.phone} className="bg-white dark:bg-slate-900 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-premium flex flex-col group transition-all hover:-translate-y-1">
+                                    <div key={staff.uid || staff.email || staff.phone} className="bg-white dark:bg-slate-900 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-premium flex flex-col group transition-all hover:-translate-y-1">
                                         <div className="flex items-center gap-6 mb-8">
                                             <div className="w-16 h-16 bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 rounded-3xl flex items-center justify-center text-2xl font-black shadow-sm border border-brand-100 dark:border-brand-800">
                                                 {staff.name.charAt(0)}
@@ -1682,13 +1686,13 @@ const AdminView: React.FC<AdminViewProps> = ({
                                         </div>
                                         <div className="grid grid-cols-2 gap-4 mt-auto">
                                             <button 
-                                                onClick={() => onUpdateStaffStatus?.(staff.staffCode!, UserStatus.REJECTED)}
+                                                onClick={() => onUpdateStaffStatus?.(staff.uid!, UserStatus.REJECTED)}
                                                 className="h-14 rounded-2xl border-2 border-rose-100 dark:border-rose-900 text-rose-500 font-black uppercase text-[10px] tracking-widest hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all active:scale-95"
                                             >
                                                 Reject
                                             </button>
                                             <button 
-                                                onClick={() => onUpdateStaffStatus?.(staff.staffCode!, UserStatus.ACTIVE)}
+                                                onClick={() => onUpdateStaffStatus?.(staff.uid!, UserStatus.ACTIVE)}
                                                 className="h-14 rounded-2xl bg-brand-600 text-white font-black uppercase text-[10px] tracking-widest shadow-lg hover:bg-brand-700 transition-all active:scale-95"
                                             >
                                                 Authorize

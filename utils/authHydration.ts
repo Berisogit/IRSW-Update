@@ -22,7 +22,13 @@ export function resolveRoleForHydration(
   membershipRoles: Array<unknown> = [],
   staffRole?: unknown
 ): string | null {
-  for (const candidate of [claimsRole, userDocRole, ...membershipRoles, staffRole]) {
+  for (const candidate of [
+ claimsRole,
+ userDocRole,
+ ...membershipRoles,
+ staffRole
+])
+ {
     const normalized = normalizeRoleValue(candidate);
     if (normalized) {
       return normalized;
